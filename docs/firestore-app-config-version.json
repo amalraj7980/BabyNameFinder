@@ -1,0 +1,22 @@
+{
+  "android": {
+    "latestVersion": "2.2.0",
+    "minimumVersion": "2.0.0",
+    "forceUpdate": false,
+    "updateType": "flexible"
+  },
+  "ios": {
+    "latestVersion": "2.2.0",
+    "minimumVersion": "2.0.0",
+    "forceUpdate": false
+  },
+  "title": "Update Available (Test)",
+  "message": "This is a test update prompt from Firestore. Tap Update or Later to continue.",
+  "_notes": {
+    "installedAndroidVersion": "2.1",
+    "thisDocTriggers": "optional update UI in debug (latest 2.2.0 > installed 2.1)",
+    "forceTest": "set android.forceUpdate=true OR minimumVersion to 9.0.0",
+    "noUpdateTest": "set latestVersion and minimumVersion to 2.1",
+    "rules": "app_config is read:true write:false — create this document in Firebase Console"
+  }
+}

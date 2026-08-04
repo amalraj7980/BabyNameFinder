@@ -61,39 +61,23 @@ const DislikeListScreen = ({navigation, route}) => {
   };
 
   useEffect(() => {
+    setCurrentPage(0);
+    setHasMoreData(true);
     fetchBabyNamesData();
-  }, []);
-  useEffect(() => {
-    fetchBabyNamesData();
-  }, [route.params]);
+  }, [route.params, likeCount, dislikeCount, dislikeFilterScreen, userId]);
+
   const loadMoreData = () => {
     if (!isLoading && hasMoreData) {
       fetchBabyNamesData();
     }
   };
 
-  // useEffect(() => {
-  //   fetchBabyNamesData();
-  // }, [dislikeCount, likeCount]);
-  // useEffect(() => {
-  //   console.log('FFFFFF=----------->', babyNamesData);
-  //   console.log('MMMMM=----------->', dislikeFilterScreen);
-  // }, [dislikeFilterScreen]);
-  useEffect(() => {
-    setCurrentPage(0); // Reset to the first page whenever filters change or counts change
-    setHasMoreData(true); // Reset the assumption of more data
-    fetchBabyNamesData();
-  }, [route.params]);
-  // useEffect(() => {
-  //   fetchBabyNamesData();
-  // }, [likeCount, dislikeCount]);
-
   const fetchBabyNamesData = useCallback(
-    async pageNumber => {
+    async () => {
       setIsLoading(true);
       const queryParams = {
-        pageCount: 200,
-        page: currentPage,
+        pageCount: 1000,
+        page: 0,
         startWith: dislikeFilterScreen?.firstLetter ?? '',
         endsWith: dislikeFilterScreen?.lastLetter ?? '',
         compoundName: dislikeFilterScreen?.compoundLetter ?? false,
@@ -102,18 +86,14 @@ const DislikeListScreen = ({navigation, route}) => {
       };
       try {
         const response = await getReactions(userId, queryParams);
-        setBabyNamesData(prevData => [...response.disLikes]);
+        setBabyNamesData(response?.disLikes ?? []);
         setIsLoading(false);
-        console.log(
-          'After setting state lastLetter',
-          filterParams.filter?.lastLetter,
-        );
       } catch (error) {
         console.error(`Failed to fetch data: ${error}`);
         setIsLoading(false);
       }
     },
-    [filterParams?.filter, likeCount, dislikeCount, dislikeFilterScreen, currentPage, userId],
+    [dislikeFilterScreen, userId],
   );
 
   const handleRefresh = async () => {

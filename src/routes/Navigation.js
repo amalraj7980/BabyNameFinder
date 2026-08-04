@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {View, Text, TouchableOpacity, StatusBar} from 'react-native';
-import {createStackNavigator} from '@react-navigation/stack';
+import {AppState, StatusBar} from 'react-native';
 import {createDrawerNavigator} from '@react-navigation/drawer';
 import {NavigationContainer} from '@react-navigation/native';
 import LandingScreen from '../screens/Auth/LandingScreen';
@@ -11,17 +10,28 @@ import {Storage} from '../util';
 import {AuthContextProvider} from '../context/AuthContext';
 import {AppContextProvider} from '../context/AppContext';
 import SplashScreen from '../screens/Auth/SplashScreen';
+import ForceUpdateScreen from '../screens/appUpdate/ForceUpdateScreen';
 import {linkingConfig} from '../components/DeepLinking';
 import {NetworkProvider} from '../context/NetworkContext';
 import GlobalNetworkNotifier from '../hooks/GlobalNetworkNotifier';
 import {navigationRef} from './navigationRef';
-const Stack = createStackNavigator();
+import {ThemeProvider, useTheme} from '../theme';
+import {
+  reapplyUpdateGateOnForeground,
+  runStartupAppUpdateCheck,
+  useAppUpdateStore,
+} from '../services/appUpdate';
+import {trackAppOpen} from '../services/rating/ratingService';
+
 const Drawer = createDrawerNavigator();
+
+/** Same as CareerMate AuthNavigationBridge — minimum splash on launch. */
+const MIN_SPLASH_DURATION = 5000;
 
 const RouteStack = () => {
   const [appSetupComplete, setAppSetupComplete] = useState(false);
-  const [isSetupCheckComplete, setSetupCheckComplete] = useState(false); // New state
   const [isLoading, setIsloading] = useState(false);
+
   useEffect(() => {
     checkAppSetup();
   }, []);
@@ -74,30 +84,82 @@ const RouteStack = () => {
   );
 };
 
-const Navigation = () => {
-  const [appLoaded, setAppLoaded] = useState(false);
+/**
+ * CareerMate-style update gate bridge:
+ * - startup Firestore / Play check
+ * - hold splash until check done + min 5s
+ * - ForceUpdate UI when required
+ * - foreground recheck after store / recents
+ */
+const ThemedNavigation = () => {
+  const [minSplashElapsed, setMinSplashElapsed] = useState(false);
+  const {navigationTheme, colors, hydrated} = useTheme();
+  const {phase} = useAppUpdateStore();
 
   useEffect(() => {
-    setTimeout(() => {
-      setAppLoaded(true);
-    }, 2000);
+    void trackAppOpen();
+    void runStartupAppUpdateCheck();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setMinSplashElapsed(true),
+      MIN_SPLASH_DURATION,
+    );
+    return () => clearTimeout(timer);
+  }, []);
+
+  // After "Close the app" / recents / return from store — same as CareerMate.
+  useEffect(() => {
+    const onAppStateChange = next => {
+      if (next !== 'active') {
+        return;
+      }
+      void reapplyUpdateGateOnForeground();
+    };
+    const sub = AppState.addEventListener('change', onAppStateChange);
+    return () => sub.remove();
+  }, []);
+
+  const updatePending = phase === 'idle' || phase === 'checking';
+
+  if (phase === 'ios_required') {
+    return <ForceUpdateScreen />;
+  }
+
+  if (!hydrated || !minSplashElapsed || updatePending) {
+    return <SplashScreen />;
+  }
 
   return (
     <>
-      <NetworkProvider>
-        <GlobalNetworkNotifier>
+      <StatusBar
+        barStyle={colors.statusBarStyle || 'dark-content'}
+        backgroundColor={colors.headerBg || colors.primary}
+      />
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linkingConfig}
+        theme={navigationTheme}>
+        <RouteStack />
+      </NavigationContainer>
+    </>
+  );
+};
+
+const Navigation = () => {
+  return (
+    <NetworkProvider>
+      <GlobalNetworkNotifier>
+        <ThemeProvider>
           <AuthContextProvider>
             <AppContextProvider>
-              <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-              <NavigationContainer ref={navigationRef} linking={linkingConfig}>
-                {appLoaded ? <RouteStack /> : <SplashScreen />}
-              </NavigationContainer>
+              <ThemedNavigation />
             </AppContextProvider>
           </AuthContextProvider>
-        </GlobalNetworkNotifier>
-      </NetworkProvider>
-    </>
+        </ThemeProvider>
+      </GlobalNetworkNotifier>
+    </NetworkProvider>
   );
 };
 

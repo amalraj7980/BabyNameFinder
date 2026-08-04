@@ -16,7 +16,7 @@ import {
 import {AuthContext} from '../../context/AuthContext';
 import {AppContext} from '../../context/AppContext';
 import CustomPopup from '../../components/CustomPopup';
-import {likeUser, getAllBabyNames} from '../../api';
+import {toggleLikeUser, getAllBabyNames, subscribeBabyNames, getReactions} from '../../api';
 import {Colors} from '../../styles';
 import Foundation from 'react-native-vector-icons/Foundation';
 import AntDesign from 'react-native-vector-icons/AntDesign';
@@ -73,12 +73,6 @@ const TheWholeLIst = ({navigation, route}) => {
       </View>
     );
   };
-  useEffect(() => {
-    // Call the API function inside useEffect or any other event handler
-    fetchBabyNamesData(page);
-    setFetchFilterData(filterParams);
-  }, [fetchBabyNamesData, page, route.params]);
-
   const fetchBabyNamesData = useCallback(
     async pageNumber => {
       setIsLoading(true);
@@ -87,31 +81,47 @@ const TheWholeLIst = ({navigation, route}) => {
         page: 0,
         startWith: seachfilterDataWholeNames?.firstLetter ?? '',
         endsWith: seachfilterDataWholeNames?.lastLetter ?? '',
-        compoundName: seachfilterDataWholeNames?.compoundLetter ?? false,
+        compoundName: seachfilterDataWholeNames?.compoundLetter ?? true,
         gender: seachfilterDataWholeNames?.gender ?? 'all',
         contains: seachfilterDataWholeNames?.contains ?? '',
+        forceRefresh: true,
       };
       try {
         const data = await getAllBabyNames(queryParams);
-        console.log(data);
-        const newData = data.map(item => ({
+        let likedIds = new Set();
+        try {
+          const reactions = await getReactions(userId ?? 0, {});
+          likedIds = new Set((reactions?.likes || []).map(n => String(n.id)));
+        } catch (e) {
+          // guest / no reactions yet
+        }
+        console.log('whole list names:', data?.length, data);
+        const newData = (data || []).map(item => ({
           ...item,
-          liked: false,
+          liked: likedIds.has(String(item.id)),
         }));
-        console.log('0000000', newData);
-        setBabyNamesData(prevData => [...newData]);
+        setBabyNamesData(newData);
         setIsLoading(false);
-        console.log(
-          'After setting state lastLetter',
-          filterParams.filter?.lastLetter,
-        );
       } catch (error) {
         console.error(`Failed to fetch data: ${error}`);
         setIsLoading(false);
       }
     },
-    [filterParams?.filter, page, seachfilterDataWholeNames],
+    [filterParams?.filter, page, seachfilterDataWholeNames, userId],
   );
+
+  useEffect(() => {
+    fetchBabyNamesData(page);
+    setFetchFilterData(filterParams);
+  }, [fetchBabyNamesData, page, route.params]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeBabyNames(() => {
+      fetchBabyNamesData(page);
+    });
+    return unsubscribe;
+  }, [fetchBabyNamesData, page]);
+
   const likeuser = useCallback(
     async id => {
       try {
@@ -120,7 +130,7 @@ const TheWholeLIst = ({navigation, route}) => {
           nameId: id,
         };
 
-        const likedData = await likeUser(PAYLOAD);
+        const likedData = await toggleLikeUser(PAYLOAD);
 
         console.log(likedData.liked);
         setLiked(likedData.liked);

@@ -25,6 +25,7 @@ import PrivacyPolicy from '../screens/legal/PrivacyPolicy';
 import TermsOfService from '../screens/legal/TermsOfService';
 import SpreadTheWord from '../screens/share/SpreadTheWord';
 import InAppPurchase from '../screens/premium/InAppPurchase';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Share from 'react-native-share';
@@ -280,9 +281,9 @@ const AppStack = ({navigation}) => {
     <Stack.Navigator
       screenOptions={{
         headerStyle: {
-          backgroundColor: Colors.primary, // Add your desired background color
+          backgroundColor: Colors.headerBg || Colors.primary,
         },
-        headerTintColor: Colors.WHITE, // Set the color for back button and title
+        headerTintColor: Colors.WHITE,
         headerTitleStyle: {
           fontSize: 18,
         },
@@ -446,6 +447,21 @@ const AppStack = ({navigation}) => {
               </TouchableOpacity>
             </>
           ),
+        }}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          headerTitle: () => (
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <Text
+                style={{fontSize: 18, marginRight: 10, color: Colors.WHITE}}>
+                Settings
+              </Text>
+            </View>
+          ),
+          headerLeft: () => renderMenuIcon(),
         }}
       />
       <Stack.Screen

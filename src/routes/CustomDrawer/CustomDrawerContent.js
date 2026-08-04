@@ -337,6 +337,21 @@ const CustomDrawerContent = ({navigation}) => {
 
           <TouchableOpacity
             style={styles.drawerItem}
+            onPress={() => handleDrawerItemPress('Settings')}>
+            <Icon name="settings" size={25} color={Colors.primary} />
+            <Text
+              style={[
+                styles.drawerItemText,
+                selectedItem === 'Settings'
+                  ? {color: Colors.primary}
+                  : {color: Colors.drawerTextGray},
+              ]}>
+              Settings
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.drawerItem}
             onPress={() => handleSpreadTheWordShare()}>
             <Icon name="favorite" size={23} color={Colors.primary} />
             <Text

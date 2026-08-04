@@ -95,6 +95,18 @@
   "bT_continue": "استمر",
   "loginToYourAccount": "تسجيل الدخول إلى حسابك",
   "forgotPassword": "هل نسيت كلمة المرور؟",
-  "dontHaveAnAccount": " ليس لديك حساب؟"
-
+  "dontHaveAnAccount": " ليس لديك حساب؟",
+  "appUpdate": {
+    "updateNow": "حدّث الآن",
+    "forceTitleLine1": "التحديث مطلوب لـ",
+    "forceTitleLine2": "Baby Names",
+    "forceMessage": "لم يعد هذا الإصدار مدعومًا. يرجى التحديث لمتابعة استخدام Baby Names Together.",
+    "closeApp": "لا، شكرًا! أغلق التطبيق",
+    "optionalTitleLine1": "يتوفر تحديث لـ",
+    "optionalTitleLine2": "Baby Names",
+    "optionalMessage": "يتوفر إصدار أحدث من Baby Names Together مع تحسينات وإصلاحات. يمكنك التحديث الآن أو المتابعة والتحديث لاحقًا.",
+    "maybeLater": "ربما لاحقًا",
+    "title": "يتوفر تحديث",
+    "message": "لم يعد هذا الإصدار مدعومًا. نعتذر عن أي إزعاج."
+  }
 }

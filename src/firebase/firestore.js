@@ -29,6 +29,10 @@ export const babyNameDocument = nameId =>
 export const metaDocument = (docId = 'global') =>
   firestore().collection(FIRESTORE_COLLECTIONS.meta).doc(docId);
 
+/** Remote version gate: collection `app_config`, document `version`. */
+export const appVersionConfigDocument = () =>
+  firestore().collection(FIRESTORE_COLLECTIONS.appConfig).doc('version');
+
 /** @deprecated use metaDocument — kept for call-site compatibility */
 export const statisticsDocument = (docId = 'global') => metaDocument(docId);
 
@@ -67,15 +71,33 @@ export const resolveReactionUserId = userId => {
 export const mapNameDoc = docSnap => {
   const data = docSnap.data() || {};
   const id = String(data.id ?? docSnap.id);
+  const syllableCountRaw = data.syllableCount;
+  const syllableCount =
+    typeof syllableCountRaw === 'number' && syllableCountRaw > 0
+      ? syllableCountRaw
+      : Number(syllableCountRaw) > 0
+        ? Number(syllableCountRaw)
+        : 1;
+
+  let gender = data.gender ?? 'Unisex';
+  const g = String(gender).toLowerCase();
+  if (g === 'male' || g === 'boy' || g === 'm') {
+    gender = 'Male';
+  } else if (g === 'female' || g === 'girl' || g === 'f') {
+    gender = 'Female';
+  } else if (g === 'unisex' || g === 'neutral') {
+    gender = 'Unisex';
+  }
+
   return {
     ...data,
     id,
     key: id,
     name: data.name ?? '',
-    gender: data.gender ?? 'Unisex',
+    gender,
     origin: data.origin ?? '',
     meaning: data.meaning ?? '',
     syllables: data.syllables ?? data.name ?? '',
-    syllableCount: data.syllableCount ?? 1,
+    syllableCount,
   };
 };

@@ -1,22 +1,54 @@
 /**
- * Baby names — Firestore read-only (Console rules: allow write: if false).
- * Catalog must be uploaded via Firebase Console / Admin SDK — not the app.
+ * Baby names — live Firestore catalog for all listing screens.
+ * Rules: public read. Writes only if Console allows (signed-in create/update).
  */
+import firestore from '@react-native-firebase/firestore';
 import {
   babyNamesCollection,
+  babyNameDocument,
   metaDocument,
   mapNameDoc,
+  serverTimestamp,
 } from '../firebase/firestore';
+import BOOTSTRAP_NAMES from '../data/seedNames';
 
 let cachedNames = null;
 let namesUnsubscribe = null;
 const nameListeners = new Set();
 
+const normalizeGenderFilter = gender => {
+  const g = (gender || 'all').toString().toLowerCase();
+  if (g === 'boy' || g === 'male' || g === 'm') {
+    return 'male';
+  }
+  if (g === 'girl' || g === 'female' || g === 'f') {
+    return 'female';
+  }
+  if (g === 'unisex' || g === 'neutral') {
+    return 'unisex';
+  }
+  return 'all';
+};
+
+const normalizeItemGender = gender => {
+  const g = (gender || '').toString().toLowerCase();
+  if (g === 'boy' || g === 'male' || g === 'm') {
+    return 'male';
+  }
+  if (g === 'girl' || g === 'female' || g === 'f') {
+    return 'female';
+  }
+  if (g === 'unisex' || g === 'neutral') {
+    return 'unisex';
+  }
+  return g;
+};
+
 const applyFilters = (names, filters = {}) => {
   const startWith = (filters.startWith || '').toString().toLowerCase();
   const endsWith = (filters.endsWith || '').toString().toLowerCase();
   const contains = (filters.contains || '').toString().toLowerCase();
-  const gender = (filters.gender || 'all').toString().toLowerCase();
+  const gender = normalizeGenderFilter(filters.gender);
   const compoundName = filters.compoundName;
 
   return names.filter(item => {
@@ -31,17 +63,16 @@ const applyFilters = (names, filters = {}) => {
       return false;
     }
     if (gender && gender !== 'all') {
-      const g = (item.gender || '').toLowerCase();
-      if (g !== gender && g !== 'unisex') {
-        if (gender === 'unisex') {
-          if (g !== 'unisex') {
-            return false;
-          }
-        } else if (g !== gender) {
+      const g = normalizeItemGender(item.gender);
+      if (gender === 'unisex') {
+        if (g !== 'unisex') {
           return false;
         }
+      } else if (g !== gender && g !== 'unisex') {
+        return false;
       }
     }
+    // compoundName === false → exclude multi-word / hyphenated names
     if (compoundName === false || compoundName === 'false') {
       if (/\s|-/.test(item.name || '')) {
         return false;
@@ -67,12 +98,84 @@ const notifyListeners = names => {
   });
 };
 
-/** No-op: client writes to baby_names are denied by published rules. */
+const syncMetaCount = async count => {
+  try {
+    await metaDocument('global').set(
+      {namesCount: count, updatedAt: serverTimestamp()},
+      {merge: true},
+    );
+  } catch (e) {
+    // meta may be read-only — ignore
+  }
+};
+
 export const forceSeedBabyNames = async () => {
-  console.log(
-    'baby_names is read-only — add/edit names in Firebase Console (baby_names collection).',
-  );
-  return {seeded: false, count: cachedNames?.length || 0};
+  try {
+    const existing = await babyNamesCollection().get();
+    const existingIds = new Set(existing.docs.map(d => d.id));
+    const missing = BOOTSTRAP_NAMES.filter(
+      item => !existingIds.has(String(item.id)),
+    );
+
+    if (missing.length === 0 && !existing.empty) {
+      console.log(
+        `baby_names ready (${existing.size} docs) — listing uses Firestore`,
+      );
+      clearNamesCache();
+      await fetchAllBabyNames({forceRefresh: true});
+      return {seeded: false, count: existing.size};
+    }
+
+    if (missing.length === 0 && existing.empty) {
+      // full bootstrap
+    }
+
+    const toWrite = existing.empty ? BOOTSTRAP_NAMES : missing;
+    console.log(
+      `Upserting ${toWrite.length} baby_names into Firestore...`,
+    );
+    const batchSize = 400;
+    for (let i = 0; i < toWrite.length; i += batchSize) {
+      const batch = firestore().batch();
+      toWrite.slice(i, i + batchSize).forEach(item => {
+        const id = String(item.id);
+        batch.set(
+          babyNameDocument(id),
+          {
+            id,
+            name: item.name || '',
+            gender: item.gender || 'Unisex',
+            origin: item.origin || '',
+            meaning: item.meaning || '',
+            syllables: item.syllables || '',
+            syllableCount: item.syllableCount || 1,
+            updatedAt: serverTimestamp(),
+          },
+          {merge: true},
+        );
+      });
+      await batch.commit();
+    }
+    const after = await babyNamesCollection().get();
+    await syncMetaCount(after.size);
+    clearNamesCache();
+    await fetchAllBabyNames({forceRefresh: true});
+    console.log(`baby_names listing catalog: ${after.size} docs`);
+    return {seeded: true, count: after.size};
+  } catch (e) {
+    console.warn(
+      'baby_names upsert skipped (publish rules allowing signed-in write, or add docs in Console):',
+      e?.message || e,
+    );
+    // Still try to load whatever is already in Console (e.g. Ava)
+    try {
+      clearNamesCache();
+      await fetchAllBabyNames({forceRefresh: true});
+    } catch (readErr) {
+      // ignore
+    }
+    return {seeded: false, count: cachedNames?.length || 0, error: e?.message};
+  }
 };
 
 export const seedBabyNamesIfNeeded = async () => forceSeedBabyNames();
@@ -84,12 +187,8 @@ export const startBabyNamesLiveSync = () => {
   namesUnsubscribe = babyNamesCollection().onSnapshot(
     snapshot => {
       cachedNames = snapshot.docs.map(mapNameDoc);
+      console.log(`baby_names live: ${cachedNames.length} names`);
       notifyListeners(cachedNames);
-      if (cachedNames.length === 0) {
-        console.warn(
-          'baby_names is empty. Upload name documents in Firebase Console.',
-        );
-      }
     },
     error => {
       console.log('baby_names live sync error:', error?.message || error);
@@ -116,10 +215,11 @@ export const fetchAllBabyNames = async ({forceRefresh = false} = {}) => {
 
   const snap = await babyNamesCollection().get();
   cachedNames = snap.docs.map(mapNameDoc);
+  console.log(`baby_names fetched: ${cachedNames.length}`);
 
   if (cachedNames.length === 0) {
     console.warn(
-      'baby_names is empty in Firestore. Add documents in Console (client cannot write).',
+      'baby_names is empty. Add docs in Console (like Ava) or allow signed-in write to bootstrap.',
     );
   }
 
@@ -132,7 +232,7 @@ export const clearNamesCache = () => {
 };
 
 export const getBabyNames = async (filters = {}) => {
-  const all = await fetchAllBabyNames();
+  const all = await fetchAllBabyNames({forceRefresh: !!filters.forceRefresh});
   const filtered = applyFilters(all, filters);
   return paginate(filtered, filters.page ?? 0, filters.pageCount ?? 1000);
 };
@@ -142,7 +242,7 @@ export const getBabyNamesExcludingReactions = async (
   reactedIds = [],
 ) => {
   const reactedSet = new Set((reactedIds || []).map(String));
-  const all = await fetchAllBabyNames();
+  const all = await fetchAllBabyNames({forceRefresh: !!filters.forceRefresh});
   const filtered = applyFilters(all, filters).filter(
     item => !reactedSet.has(String(item.id)),
   );

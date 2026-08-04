@@ -25,7 +25,14 @@ import {Colors} from '../../styles';
 import Foundation from 'react-native-vector-icons/Foundation';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {disLikeUser, likeUser, getExcludeReactions, subscribeBabyNames} from '../../api';
+import {
+  disLikeUser,
+  likeUser,
+  undoLikeUser,
+  undoDisLikeUser,
+  getExcludeReactions,
+  subscribeBabyNames,
+} from '../../api';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
 import {Storage} from '../../util';
@@ -146,9 +153,13 @@ const BabyNamesScreen = ({navigation, route}) => {
         {isUserLoggedin, userId},
       );
       try {
-        const response = await getExcludeReactions(queryParams);
+        const response = await getExcludeReactions({
+          ...queryParams,
+          forceRefresh: true,
+        });
+        console.log('home list names:', response.babyNames?.length, response.babyNames);
         setBabyNamesData(response.babyNames || []);
-        setBabyNamesCount(filterParams ? response.count : 0);
+        setBabyNamesCount(response.count ?? 0);
         setIsLoading(false);
       } catch (error) {
         console.error(`Failed to fetch data: ${error}`);
@@ -182,11 +193,8 @@ const BabyNamesScreen = ({navigation, route}) => {
     [page, seachfilterData, userId],
   );
 
-  // Catalog is public — load for guest (unsigned) and signed-in users alike
+  // Catalog — load Firestore baby_names for home swipe / grid / compact lists
   useEffect(() => {
-    if (authStateLoading) {
-      return;
-    }
     fetchBabyNamesData(page);
     fetchData(page);
     setFetchFilterData(filterParams);
@@ -195,7 +203,6 @@ const BabyNamesScreen = ({navigation, route}) => {
     fetchData,
     filterParams,
     route.params,
-    authStateLoading,
     firebaseReady,
     userId,
     loginOccurred,
@@ -203,9 +210,11 @@ const BabyNamesScreen = ({navigation, route}) => {
 
   // Live Firestore catalog — same name list for guest + signed-in
   useEffect(() => {
-    const unsubscribe = subscribeBabyNames(() => {
-      fetchBabyNamesData();
-      fetchData();
+    const unsubscribe = subscribeBabyNames(names => {
+      if (Array.isArray(names)) {
+        fetchBabyNamesData();
+        fetchData();
+      }
     });
     return unsubscribe;
   }, [fetchBabyNamesData, fetchData]);
@@ -345,28 +354,26 @@ const BabyNamesScreen = ({navigation, route}) => {
       };
 
       if (lastSwiped.action === 'liked') {
-        likeUser(PAYLOAD)
+        undoLikeUser(PAYLOAD)
           .then(() => {
             setLikedNames(state =>
               state.filter(id => id !== lastSwiped.card.id),
             );
-            // setBabyNamesCount(babyNamesCount + 1);
-            setIsUndoEnabled(false); // Disable the Undo button
+            setIsUndoEnabled(false);
           })
           .catch(error => {
-            console.log('Error liking:', error);
+            console.log('Error undoing like:', error);
           });
       } else if (lastSwiped.action === 'disliked') {
-        disLikeUser(PAYLOAD)
+        undoDisLikeUser(PAYLOAD)
           .then(() => {
             setDislikedNames(state =>
               state.filter(id => id !== lastSwiped.card.id),
             );
-            //setBabyNamesCount(babyNamesCount + 1);
-            setIsUndoEnabled(false); // Disable the Undo button
+            setIsUndoEnabled(false);
           })
           .catch(error => {
-            console.log('Error disliking:', error);
+            console.log('Error undoing dislike:', error);
           });
       }
     }
@@ -712,13 +719,10 @@ const BabyNamesScreen = ({navigation, route}) => {
               handleNope={
                 card => {
                   updateLocalDislikeState(card.id);
-                  setSwipedCards([...swipedCards, {card, action: 'disliked'}]);
-                  disLikeuser(card.id).then((err, data) => {
-                    if (err) {
-                      revertLocalDislikeState(card.id);
-                    }
-                    console.log('data---->', data);
-                  }); // Using async/await here for better readability
+                  disLikeuser(card.id).catch(err => {
+                    revertLocalDislikeState(card.id);
+                    console.log('dislike swipe error:', err);
+                  });
                 }
                 // : swipeBlocked
                 // ? async () => {
@@ -746,14 +750,10 @@ const BabyNamesScreen = ({navigation, route}) => {
               handleYup={
                 card => {
                   updateLocalLikeState(card.id);
-                  setSwipedCards([...swipedCards, {card, action: 'liked'}]);
-
-                  likeuser(card.id).then((err, data) => {
-                    if (err) {
-                      revertLikeLocalState(card.id);
-                    }
-                    console.log('data---->', data);
-                  }); // Using async/await here for better readability
+                  likeuser(card.id).catch(err => {
+                    revertLikeLocalState(card.id);
+                    console.log('like swipe error:', err);
+                  });
                 }
                 // : swipeBlocked
                 // ? async () => {

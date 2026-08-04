@@ -18,14 +18,21 @@ service cloud.firestore {
         && username.matches('^[a-zA-Z0-9_\\.]+$');
     }
 
-    // Baby name catalog — public read, no client writes
+    // Baby name catalog — public read; signed-in can create/update (Console or app bootstrap)
     match /baby_names/{nameId} {
       allow read: if true;
-      allow write: if false;
+      allow create, update: if isSignedIn();
+      allow delete: if false;
     }
 
     // App stats (e.g. namesCount)
     match /meta/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // App update gate — readable on splash before login. Writes via Console only.
+    match /app_config/{docId} {
       allow read: if true;
       allow write: if false;
     }

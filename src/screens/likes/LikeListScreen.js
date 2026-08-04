@@ -65,21 +65,11 @@ const LikeListScreen = ({navigation, route}) => {
     }
     return null;
   };
-  // useEffect(() => {
-  //   fetchBabyNamesData();
-  // }, [dislikeCount, likeCount]);
   useEffect(() => {
-    fetchBabyNamesData(); // Call on component mount.
-  }, []);
-  useEffect(() => {
-    console.log('FFFFFF=----------->', babyNamesData);
-    console.log('MMMMM=----------->', likeFilterScreen);
-  }, [likeFilterScreen]);
-  useEffect(() => {
-    setCurrentPage(0); // Reset to the first page whenever filters change or counts change
-    setHasMoreData(true); // Reset the assumption of more data
+    setCurrentPage(0);
+    setHasMoreData(true);
     fetchBabyNamesData();
-  }, [route.params]);
+  }, [route.params, likeCount, dislikeCount, likeFilterScreen, userId]);
 
   const loadMoreData = () => {
     if (!isLoading && hasMoreData) {
@@ -101,17 +91,13 @@ const LikeListScreen = ({navigation, route}) => {
     try {
       const response = await getReactions(userId, queryParams);
       console.log('response------------>', response);
-      setBabyNamesData(response.likes);
+      setBabyNamesData(response?.likes ?? []);
       setIsLoading(false);
-      console.log(
-        'After setting state lastLetter',
-        filterParams.filter?.lastLetter,
-      );
     } catch (error) {
       console.error(`Failed to fetch data: ${error}`);
       setIsLoading(false);
     }
-  }, [filterParams?.filter, likeFilterScreen, userId]);
+  }, [likeFilterScreen, userId]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true); // Set the refreshing state to true

@@ -108,5 +108,18 @@
   "dontHaveAnAccount": " Don't have an account ?",
   "alreadyHaveAnAccount": "ALREADY HAVE AN ACCOUNT ?",
   "OtpSendToText": "The OTP has been sent to your phone number.",
-  "OTPSendToMail": "The OTP has been sent to your Mail box."
+  "OTPSendToMail": "The OTP has been sent to your Mail box.",
+  "appUpdate": {
+    "updateNow": "Update now",
+    "forceTitleLine1": "Update required for",
+    "forceTitleLine2": "Baby Names",
+    "forceMessage": "The current version of this application is no longer supported. Please update to continue using Baby Names Together.",
+    "closeApp": "No, Thanks! Close the app",
+    "optionalTitleLine1": "Update available for",
+    "optionalTitleLine2": "Baby Names",
+    "optionalMessage": "A newer version of Baby Names Together is ready with improvements and fixes. You can update now, or continue and update later.",
+    "maybeLater": "Maybe later",
+    "title": "Update Available",
+    "message": "The current version of this application is no longer supported. We apologize for any inconvenience we may have caused you."
+  }
 }

@@ -20,6 +20,9 @@ import {
 import {
   likeName,
   dislikeName,
+  toggleLikeName,
+  removeLike,
+  removeDislike,
   getUserReactions,
   getReactionCounts,
   getReactedNameIds,
@@ -32,9 +35,18 @@ export const signup = async PAYLOAD => signupWithEmailPassword(PAYLOAD);
 
 export const forgot = async PAYLOAD => resetPasswordWithEmail(PAYLOAD);
 
+/** Swipe / list move — always set like */
 export const likeUser = async PAYLOAD => likeName(PAYLOAD);
 
+/** TheWholeLIst heart — toggle */
+export const toggleLikeUser = async PAYLOAD => toggleLikeName(PAYLOAD);
+
+/** Swipe / list move — always set dislike */
 export const disLikeUser = async PAYLOAD => dislikeName(PAYLOAD);
+
+export const undoLikeUser = async PAYLOAD => removeLike(PAYLOAD);
+
+export const undoDisLikeUser = async PAYLOAD => removeDislike(PAYLOAD);
 
 export const babynames = async (filters = {}) => getBabyNames(filters);
 
