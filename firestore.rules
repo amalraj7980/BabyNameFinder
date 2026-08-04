@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidUsername(username) {
+      return username is string
+        && username.size() >= 3
+        && username.size() <= 30
+        && username.matches('^[a-zA-Z0-9_\\.]+$');
+    }
+
+    // Baby name catalog — public read, no client writes
+    match /baby_names/{nameId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // App stats (e.g. namesCount)
+    match /meta/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // User profile
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasAll(['email', 'username', 'createdAt'])
+        && request.resource.data.email is string
+        && isValidUsername(request.resource.data.username);
+
+      allow update: if isOwner(uid)
+        && request.resource.data.email == resource.data.email
+        && (
+          !('username' in request.resource.data)
+          || request.resource.data.username == resource.data.username
+          || isValidUsername(request.resource.data.username)
+        );
+
+      allow delete: if false;
+    }
+
+    // Username uniqueness map
+    match /usernames/{usernameLower} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username is string
+        && usernameLower == request.resource.data.username.lower();
+
+      allow update, delete: if false;
+    }
+
+    // Likes
+    match /reactions/{uid}/likes/{nameId} {
+      allow read: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && request.resource.data.nameId == nameId;
+
+      allow delete: if isOwner(uid);
+    }
+
+    // Dislikes
+    match /reactions/{uid}/dislikes/{nameId} {
+      allow read: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && request.resource.data.nameId == nameId;
+
+      allow delete: if isOwner(uid);
+    }
+  }
+}

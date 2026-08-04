@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "191990706152",
+    "project_id": "baby-name-finder-dd77d",
+    "storage_bucket": "baby-name-finder-dd77d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:191990706152:android:f2946218ff9b01f2c93e5d",
+        "android_client_info": {
+          "package_name": "com.genesis.baby.names"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6WPvD6oLlslblxYMHiXxh8o6p7Rm01oo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

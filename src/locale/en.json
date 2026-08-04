@@ -1,0 +1,111 @@
+{
+  "appName": "Baby Names",
+  "version": "Version",
+  "navigation": {
+    "profile": "Profile",
+    "notifications": "Notifications",
+    "contactOlly": "Contact"
+  },
+  "placeholder": {
+    "email": "E-mail address",
+    "oldPassword": "Old password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm Password",
+    "password": "Password",
+    "name": "Name",
+    "dob": "DOB",
+    "nationality": "Nationality",
+    "address": "Address"
+  },
+  "title": {
+    "nationality": "Nationality",
+    "address": "Address",
+    "dateOfBirth": "Date of birth",
+    "emergencyContact": "Emergency contact",
+    "phoneVerificationHeadline": "Phone number verification",
+    "mailVerificationHeadline": "Mail verification"
+  },
+  "success": {
+    "otpResend": "OTP resend succesfully",
+    "phoneNumberVerification": "Phone number verification succesfully",
+    "mailVerification": "Mail verification succesfully",
+    "otpSend": "OTP Sent",
+    "otpVerified": "OTP Verified"
+  },
+  "error": {
+    "mandatory": "Mandatory",
+    "invalid": "Invalid",
+    "invalidPhoneNumber": "Invalid phone number",
+    "emailInvalid": "Please enter a valid email address(example@mail.com)",
+    "invalidPhone": "Phone number must start with a 5",
+    "passwordEmpty": "Password must not be empty",
+    "passcodeInvalid":"Password must be at least 6 characters.",
+    "invalidOTP": "OTP must be valid",
+    "errorUpload": "Error uploading image",
+    "imageSizeError": "Image size should be less than 2MB",
+    "imageTypeError": "Image type not supported",
+    "imageQualityError": "Image quality is low",
+    "firstNameInvalid": "First name must be valid",
+    "passwordMatch":"Passwords don't match."
+
+  },
+  "alert": {
+    "logout": {
+      "title": "Confirm logout",
+      "description": "Are you sure you want to logout?"
+    },
+    "exitApp": {
+      "description": "Do you want to exit the app?",
+      "bT_cancel": "Cancel",
+      "bT_exit": "Exit"
+    }
+  },
+  "status": {
+    "refund": "Refunded",
+    "paid": "Received",
+    "pending": "Pending",
+    "cancelled": "Cancelled",
+    "complete": "Completed",
+    "intransit": "In transit",
+    "emergencyCancellation": "Emergency cancellation",
+    "ongoing": "Ongoing"
+  },
+  "verifyOTP": "Verify OTP",
+  "privacyPolicy":"By creating or logging into an account you are agreeing with our ",
+  "bT_resetPassword": "Reset password",
+  "bT_requestOTP": "Request OTP",
+  "bT_sendOTP": "Send OTP",
+  "bT_verifyOtp": "Verify OTP",
+  "bT_login": "LOGIN",
+  "bT_Done": "DONE",
+  "bT_logout": "Log out",
+  "bT_signUp": "Sign up",
+  "bT_signIn": "Sign in",
+  "bT_registration": "Registration",
+  "bT_submit": "Submit",
+  "bT_signup": "Sign up",
+  "bT_goBack": "Go back",
+  "bT_edit": "Edit",
+  "bT_resend": "Resend",
+  "bT_download": "Download",
+  "bT_reupload": "Reupload",
+  "bT_upload": "Upload",
+  "bT_share": "Share",
+  "bT_save": "Save",
+  "ok":"OK",
+  "resetDiscription":"Enter your email address. We'll send you an email to reset your password.",
+  "resetPopupMessage":"Please check your email to set up a new password.",
+  "resetPopupTitle":"Password Reset Sent",
+  "resetButton":"Reset your password",
+  "notLoginedTitle":"User Not Logged In",
+  "notloginedMessage":"You need to create an account or log in to access this feature.",
+  "bT_continue": "Continue",
+  "loginToYourAccount": "Log in to your account",
+  "forgotPassword": "FORGOT YOUR PASSWORD?",
+  "signin_with":"Or sign in with :",
+  "lets_go":"LET'S GO !",
+  "dontHaveAnAccount": " Don't have an account ?",
+  "alreadyHaveAnAccount": "ALREADY HAVE AN ACCOUNT ?",
+  "OtpSendToText": "The OTP has been sent to your phone number.",
+  "OTPSendToMail": "The OTP has been sent to your Mail box."
+}

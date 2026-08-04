@@ -1,0 +1,99 @@
+{
+  "appName": "أولي",
+  "olly": "أولي",
+  "version": "الإصدار",
+  "navigation": {
+    "profile": "الملف الشخصي"
+  },
+  "placeholder": {
+    "search": "ابحث عن معرف الحجز أو الأماكن",
+    "phone": "5xxxxxxxx",
+    "countryCode": "+966",
+    "otp": "OTP",
+    "email": "البريد الإلكتروني",
+    "oldPassword": "كلمة المرور القديمة",
+    "newPassword": "كلمة سر جديدة",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "password": "كلمه السر",
+    "address": "عنوان"
+  },
+  "title": {
+    "nationality": "الجنسية",
+    "address": "عنوان",
+    "dateOfBirth": "تاريخ الولادة"
+    },
+  "success": {
+    "otpResend": "إعادة إرسال OTP بنجاح",
+    "otpSend": "تم إرسال OTP",
+    "otpVerified": "تم التحقق من OTP"
+  },
+  "error": {
+    "passcodeInvalid": "Passcode must be valid numbers",
+    "mandatory": "إلزامي!",
+    "invalid": "غير صالحة",
+    "invalidPhoneNumber": "رقم الهاتف غير صحيح",
+    "emailInvalid": "بريد بتنسيق بريد قياسي (name@b.c) ",
+    "invalidPhone": "يجب أن يكون الهاتف صالحًا",
+    "passwordEmpty": "يجب ألا تكون كلمة المرور فارغة",
+    "invalidOTP": "يجب أن يكون OTP صالحًا",
+    "errorUpload": "حدث خطأ أثناء رفع الصورة",
+    "imageSizeError": "يجب أن يكون حجم الصورة أقل من 2 ميغا بايت",
+    "imageTypeError": "نوع الصورة غير مدعوم",
+    "imageQualityError": "جودة الصورة منخفضة",
+    "firstNameInvalid": "يجب أن يكون الاسم الأول صالحًا"
+  },
+  "alert": {
+    "logout": {
+      "title": "أكد تسجيل الخروج",
+      "description": "هل أنت متأكد أنك تريد تسجيل الخروج؟"
+    },
+    "exitApp": {
+      "description": "هل تريد الخروج من التطبيق؟",
+      "bT_cancel": "إلغاء",
+      "bT_exit": "خروج"
+    }
+  },
+  "status": {
+    "refund": "معاد",
+    "paid": "تم الاستلام",
+    "pending": "قيد الانتظار",
+    "cancelled": "ألغيت",
+    "delivered": "تم التوصيل",
+    "pickedUp": "التقط",
+    "upcoming": "مُكَلَّف ",
+    "assigning": "غيرمعتمد",
+    "scheduled": "رحلة مجدولة",
+    "complete": "منجز",
+    "intransit": "في مرحلة انتقالية",
+    "emergencyCancellation": "الإلغاء الطارئ",
+    "ongoing": "جاري التنفيذ"
+  },
+  "verifyOTP": "تحقق من OTP",
+  "bT_resetPassword": "إعادة تعيين كلمة المرور",
+  "bT_requestOTP": "طلب OTP",
+  "bT_sendOTP": "أرسل OTP",
+  "bT_verifyOtp": "تحقق من OTP",
+  "bT_login": "تسجيل الدخول",
+  "bT_settleDue": "تسوية مستحقة SAR",
+  "bT_Done": "منجز",
+  "bT_trackTrailer": "تتبع خياط",
+  "bT_deleteDriver": "حذف السائق",
+  "bT_deleteTrailer": "حذف المقطع الدعائي",
+  "bT_logout": "تسجيل خروج",
+  "bT_signUp": "سجل",
+  "bT_registration": "تسجيل",
+  "bT_submit": "يُقدِّم",
+  "bT_goBack": "عد",
+  "bT_edit": "تعديل",
+  "bT_resend": "إعادة إرسال",
+  "bT_download": "تحميل",
+  "bT_reupload": "أعد تحميل",
+  "bT_upload": "رفع",
+  "bT_share": "شارك",
+  "bT_save": "حفظ",
+  "bT_continue": "استمر",
+  "loginToYourAccount": "تسجيل الدخول إلى حسابك",
+  "forgotPassword": "هل نسيت كلمة المرور؟",
+  "dontHaveAnAccount": " ليس لديك حساب؟"
+
+}

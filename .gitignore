@@ -1,0 +1,84 @@
+# Dependencies
+node_modules/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+vendor/bundle/
+
+# React Native / Metro
+.expo/
+.expo-shared/
+*.jsbundle
+.metro-health-check*
+
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/app/.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# iOS
+ios/build/
+ios/Pods/
+ios/Podfile.lock
+ios/*.xcworkspace
+!ios/*.xcworkspace/contents.xcworkspacedata
+ios/DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.xcuserstate
+project.xcworkspace
+
+# Keystores / secrets
+*.keystore
+*.jks
+!debug.keystore
+.env
+.env.*
+!.env.example
+google-services.json.bak
+GoogleService-Info.plist.bak
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Tests / coverage
+coverage/
+.jest/
+
+# Logs / debug
+npm-debug.*
+yarn-debug.*
+yarn-error.log
+*.log
+
+# Misc
+*.orig
+*.bak
+xcodebuild
+__MACOSX/
+bashrc

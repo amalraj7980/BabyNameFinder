@@ -1,0 +1,2 @@
+# Co-located screen components (CareerMate pattern).
+# Put screen-specific UI pieces here; keep shared UI in src/components.

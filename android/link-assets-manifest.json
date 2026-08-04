@@ -1,0 +1,21 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "src/assects/fonts/Gilda Light Italic.ttf",
+      "sha1": "891a75d931383cce8048d696cb2bc74e151b419f"
+    },
+    {
+      "path": "src/assects/fonts/OpenSans-Italic-VariableFont_wdth,wght.ttf",
+      "sha1": "436c9f82a4b6e1962fc698379e83ff39a9450820"
+    },
+    {
+      "path": "src/assects/fonts/OpenSans-VariableFont_wdth,wght.ttf",
+      "sha1": "b436e315c744dc2143fb69e6f03b3278681f73b9"
+    },
+    {
+      "path": "src/assects/fonts/Pacifico-Regular.ttf",
+      "sha1": "baca1fca7fe74b61cb33aa0da48ec1a3a77bcf49"
+    }
+  ]
+}
