@@ -1,16 +1,16 @@
 import React, {useState, useContext} from 'react';
 import {
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   ActivityIndicator,
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
-import {Colors} from '../../styles';
+import {Colors, Fonts} from '../../styles';
 import {AuthContext} from '../../context/AuthContext';
 import {AppContext} from '../../context/AppContext';
+import AppInput from '../../components/AppInput';
 import {styles} from './forgotPasswordScreenStyles';
 import {validateEmail} from '../../utils/authValidation';
 
@@ -48,10 +48,10 @@ const ForgotPasswordScreen = ({navigation}) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <Text style={styles.title}>
+        <Text style={[styles.title, {fontFamily: Fonts.bold}]}>
           {sent ? 'Check your email' : locale?.resetButton || 'Reset password'}
         </Text>
-        <Text style={styles.description}>
+        <Text style={[styles.description, {fontFamily: Fonts.regular}]}>
           {sent
             ? `We sent a reset link to ${email.trim()}. Open it from Gmail to set a new password in the app.`
             : locale?.resetDiscription ||
@@ -59,23 +59,23 @@ const ForgotPasswordScreen = ({navigation}) => {
         </Text>
 
         {!sent ? (
-          <TextInput
+          <AppInput
+            label="Email"
+            leftIcon="mail"
             value={email}
-            placeholder="E-mail address"
             onChangeText={setEmail}
+            placeholder="E-mail address"
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholderTextColor={Colors.tintGray}
-            style={{
-              ...styles.input,
-              color: 'black',
-              backgroundColor: 'white',
-            }}
+            error={fieldError || error}
           />
         ) : null}
 
-        {fieldError ? <Text style={styles.errorText}>{fieldError}</Text> : null}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {sent && error ? (
+          <Text style={[styles.errorText, {fontFamily: Fonts.medium}]}>
+            {error}
+          </Text>
+        ) : null}
 
         <TouchableOpacity
           onPress={
@@ -86,7 +86,8 @@ const ForgotPasswordScreen = ({navigation}) => {
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.resetButtonText}>
+            <Text
+              style={[styles.resetButtonText, {fontFamily: Fonts.semibold}]}>
               {sent
                 ? 'Back to Sign in'
                 : locale?.resetButton || 'Send reset link'}

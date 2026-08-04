@@ -6,6 +6,42 @@
       "sha1": "891a75d931383cce8048d696cb2bc74e151b419f"
     },
     {
+      "path": "src/assects/fonts/Inter-Black.ttf",
+      "sha1": "ff2d9fdf17ab9adfd7cd41a75ef0495f11d27b56"
+    },
+    {
+      "path": "src/assects/fonts/Inter-Bold.ttf",
+      "sha1": "114827cbea95681eee9d877b0b1ab0515d5f3b69"
+    },
+    {
+      "path": "src/assects/fonts/Inter-ExtraBold.ttf",
+      "sha1": "0a6cf7f44c9be40bd1179af91ed3589b534e2642"
+    },
+    {
+      "path": "src/assects/fonts/Inter-ExtraLight.ttf",
+      "sha1": "9b79bf395137be66b2c17acec56c4915e10a12f1"
+    },
+    {
+      "path": "src/assects/fonts/Inter-Light.ttf",
+      "sha1": "791a657bf537ff4272bae72f43c1c9981ab4d623"
+    },
+    {
+      "path": "src/assects/fonts/Inter-Medium.ttf",
+      "sha1": "17ec5016a5f2b2ea4f27f7bce1df4192d3590161"
+    },
+    {
+      "path": "src/assects/fonts/Inter-Regular.ttf",
+      "sha1": "077f819e60120b1ded3d5c5d8a23b8b53e12ec17"
+    },
+    {
+      "path": "src/assects/fonts/Inter-SemiBold.ttf",
+      "sha1": "29d9db84af04e729a01e0bb076c0afdf723e8bc5"
+    },
+    {
+      "path": "src/assects/fonts/Inter-Thin.ttf",
+      "sha1": "2534deaee8e837f29f2e6533f1792efe62fd27d6"
+    },
+    {
       "path": "src/assects/fonts/OpenSans-Italic-VariableFont_wdth,wght.ttf",
       "sha1": "436c9f82a4b6e1962fc698379e83ff39a9450820"
     },

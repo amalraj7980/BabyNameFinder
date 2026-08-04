@@ -101,7 +101,7 @@ const BabyNamesScreen = ({navigation, route}) => {
   const [isFilterActive, setIsFilterActive] = useState(!!filterParams.filter);
   //console.log('wwwwww----->', filterParams);
   const [swipeCounter, setSwipeCounter] = useState(0);
-  useBackExit();
+  const {ExitConfirmModal} = useBackExit();
   const getDeviceId = async () => {
     console.log('deviceId------------------------123-->', deviceId);
   };
@@ -864,6 +864,7 @@ const BabyNamesScreen = ({navigation, route}) => {
         cancelText="Cancel" // Optional cancel button text
         style={{width: '80%'}}
       />
+      <ExitConfirmModal />
     </View>
   );
 };

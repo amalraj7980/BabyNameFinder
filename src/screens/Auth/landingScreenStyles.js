@@ -1,5 +1,5 @@
 import {StyleSheet} from 'react-native';
-import {Colors} from '../../styles';
+import {Colors, Fonts} from '../../styles';
 
 export const styles = StyleSheet.create({
   container: {
@@ -43,7 +43,7 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontFamily: 'Gilda Light Italic',
+    fontFamily: Fonts.bold,
   },
   imageContainer: {
     alignItems: 'center',

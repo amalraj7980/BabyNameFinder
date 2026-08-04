@@ -2,19 +2,17 @@ import React, {useState, useEffect, useContext} from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   TouchableWithoutFeedback,
   Keyboard,
   Linking,
 } from 'react-native';
-import {Colors} from '../../styles';
+import {Colors, Fonts} from '../../styles';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
-import Icon from 'react-native-vector-icons/FontAwesome';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import CustomPopup from '../../components/CustomPopup';
+import AppInput from '../../components/AppInput';
 import {styles} from './signUpScreenStyles';
 import {validateRegisterForm} from '../../utils/authValidation';
 
@@ -31,8 +29,6 @@ const SignUpScreen = ({navigation}) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isPasswordVisible, setPasswordVisible] = useState(false);
-  const [isConfirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [isErrorPopupVisible, setIsErrorPopupVisible] = useState(false);
   const [signupError, setSignupError] = useState();
 
@@ -98,103 +94,59 @@ const SignUpScreen = ({navigation}) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <View style={[styles.inputContainer, {marginTop: 20}]}>
-          <Ionicons
-            name="person"
-            size={20}
-            color={Colors.tintGray}
-            style={styles.icon}
-          />
-          <TextInput
-            style={{...styles.inputs, color: 'black', backgroundColor: 'white'}}
-            placeholder="Full name"
-            value={fullName}
-            onChangeText={setFullName}
-            placeholderTextColor={Colors.tintGray}
-            autoCapitalize="words"
-          />
-        </View>
+        <Text
+          style={{
+            fontFamily: Fonts.bold,
+            fontSize: 22,
+            color: Colors.WHITE,
+            alignSelf: 'flex-start',
+            marginTop: 12,
+            marginBottom: 8,
+          }}>
+          Create account
+        </Text>
 
-        <View style={styles.inputContainer}>
-          <Ionicons
-            name="mail"
-            size={20}
-            color={Colors.tintGray}
-            style={styles.icon}
-          />
-          <TextInput
-            style={{...styles.inputs, color: 'black', backgroundColor: 'white'}}
-            placeholder={locale?.placeholder?.email || 'Email'}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholderTextColor={Colors.tintGray}
-          />
-        </View>
+        <AppInput
+          label="Full name"
+          leftIcon="person"
+          value={fullName}
+          onChangeText={setFullName}
+          placeholder="Full name"
+          autoCapitalize="words"
+        />
 
-        <View style={styles.inputContainer}>
-          <Icon
-            name="key"
-            size={20}
-            color={Colors.tintGray}
-            style={styles.icon}
-          />
-          <TextInput
-            style={{...styles.inputs, color: 'black', backgroundColor: 'white'}}
-            placeholder={locale?.placeholder?.password || 'Password'}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!isPasswordVisible}
-            placeholderTextColor={Colors.tintGray}
-          />
-          <TouchableOpacity
-            onPress={() => setPasswordVisible(v => !v)}>
-            <Icon
-              name={isPasswordVisible ? 'eye' : 'eye-slash'}
-              size={20}
-              color={Colors.tintGray}
-            />
-          </TouchableOpacity>
-        </View>
+        <AppInput
+          label={locale?.placeholder?.email || 'Email'}
+          leftIcon="mail"
+          value={email}
+          onChangeText={setEmail}
+          placeholder={locale?.placeholder?.email || 'Email'}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
 
-        <View style={styles.inputContainer}>
-          <Icon
-            name="key"
-            size={20}
-            color={Colors.tintGray}
-            style={styles.icon}
-          />
-          <TextInput
-            style={[styles.inputs, {color: 'black'}]}
-            placeholder={
-              locale?.placeholder?.confirmPassword || 'Confirm password'
-            }
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={!isConfirmPasswordVisible}
-            placeholderTextColor={Colors.tintGray}
-          />
-          <TouchableOpacity
-            onPress={() => setConfirmPasswordVisible(v => !v)}>
-            <Icon
-              name={isConfirmPasswordVisible ? 'eye' : 'eye-slash'}
-              size={20}
-              color={Colors.tintGray}
-            />
-          </TouchableOpacity>
-        </View>
+        <AppInput
+          label={locale?.placeholder?.password || 'Password'}
+          leftIcon="key"
+          leftIconSet="fa"
+          value={password}
+          onChangeText={setPassword}
+          placeholder={locale?.placeholder?.password || 'Password'}
+          secureTextEntry
+        />
 
-        {fieldError ? (
-          <View style={{width: '100%', paddingLeft: 5}}>
-            <Text style={styles.errorText}>{fieldError}</Text>
-          </View>
-        ) : null}
-        {authError ? (
-          <View style={{width: '100%', paddingLeft: 5}}>
-            <Text style={styles.errorText}>{authError}</Text>
-          </View>
-        ) : null}
+        <AppInput
+          label={locale?.placeholder?.confirmPassword || 'Confirm password'}
+          leftIcon="key"
+          leftIconSet="fa"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder={
+            locale?.placeholder?.confirmPassword || 'Confirm password'
+          }
+          secureTextEntry
+          error={fieldError || authError}
+        />
 
         <TouchableOpacity
           style={[styles.button, loading ? styles.disabledButton : null]}
@@ -203,7 +155,7 @@ const SignUpScreen = ({navigation}) => {
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.buttonText}>
+            <Text style={[styles.buttonText, {fontFamily: Fonts.semibold}]}>
               {locale?.lets_go || 'Create account'}
             </Text>
           )}
@@ -220,35 +172,33 @@ const SignUpScreen = ({navigation}) => {
         />
 
         <TouchableOpacity
-          style={{padding: 30}}
+          style={{padding: 24}}
           onPress={() => navigation.navigate('SignIn')}>
-          <Text style={styles.buttonText}>
+          <Text style={[styles.buttonText, {fontFamily: Fonts.medium}]}>
             {locale?.alreadyHaveAnAccount || 'Already have an account? Sign in'}
           </Text>
         </TouchableOpacity>
 
-        <View style={{padding: 0}}>
-          <Text style={styles.LinkText}>
-            {locale?.privacyPolicy || 'By continuing you agree to our '}
-            <Text
-              onPress={() => Linking.openURL(TermsAndConditionsUrl)}
-              style={[
-                styles.LinkText,
-                {textDecorationLine: 'underline', fontWeight: 'bold'},
-              ]}>
-              Terms of Service
-            </Text>
-            <Text> and </Text>
-            <Text
-              onPress={() => Linking.openURL(privacyPolicyUrl)}
-              style={[
-                styles.LinkText,
-                {textDecorationLine: 'underline', fontWeight: 'bold'},
-              ]}>
-              Privacy Policy
-            </Text>
+        <Text style={[styles.LinkText, {fontFamily: Fonts.regular}]}>
+          {locale?.privacyPolicy || 'By continuing you agree to our '}
+          <Text
+            onPress={() => Linking.openURL(TermsAndConditionsUrl)}
+            style={[
+              styles.LinkText,
+              {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
+            ]}>
+            Terms of Service
           </Text>
-        </View>
+          <Text> and </Text>
+          <Text
+            onPress={() => Linking.openURL(privacyPolicyUrl)}
+            style={[
+              styles.LinkText,
+              {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
+            ]}>
+            Privacy Policy
+          </Text>
+        </Text>
       </View>
     </TouchableWithoutFeedback>
   );

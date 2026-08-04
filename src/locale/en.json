@@ -55,9 +55,10 @@
       "description": "Are you sure you want to logout?"
     },
     "exitApp": {
+      "title": "Exit app?",
       "description": "Do you want to exit the app?",
       "bT_cancel": "Cancel",
-      "bT_exit": "Exit"
+      "bT_exit": "Exit App"
     }
   },
   "status": {

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import {createStackNavigator} from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {Colors} from '../styles';
+import {Colors, Fonts} from '../styles';
 import BabyNamesScreen from '../screens/home/BabyNamesScreen';
 import NameInformation from '../screens/home/NameInformation';
 import AiAssistant from '../screens/home/AiAssistant';
@@ -329,7 +329,7 @@ const AppStack = ({navigation}) => {
                   fontSize: 18,
                   marginRight: 10,
                   color: Colors.WHITE,
-                  fontFamily: 'GildaLightItalic',
+                  fontFamily: Fonts.semibold,
                 }}>
                 List
               </Text>

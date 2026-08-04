@@ -2,19 +2,19 @@ import React, {useState} from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
-import {Colors} from '../../styles';
+import {Fonts} from '../../styles';
 import {styles} from './forgotPasswordScreenStyles';
 import {
   validatePassword,
   validateConfirmPassword,
 } from '../../utils/authValidation';
 import {AuthContext} from '../../context/AuthContext';
+import AppInput from '../../components/AppInput';
 
 const ResetPasswordScreen = ({navigation, route}) => {
   const {resetPassword, error, clearError} = React.useContext(AuthContext);
@@ -23,7 +23,6 @@ const ResetPasswordScreen = ({navigation, route}) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   const handleReset = async () => {
     clearError?.();
@@ -59,40 +58,34 @@ const ResetPasswordScreen = ({navigation, route}) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <Text style={styles.title}>Set new password</Text>
-        <Text style={styles.description}>
+        <Text style={[styles.title, {fontFamily: Fonts.bold}]}>
+          Set new password
+        </Text>
+        <Text style={[styles.description, {fontFamily: Fonts.regular}]}>
           Choose a strong password for your account.
         </Text>
 
-        <TextInput
+        <AppInput
+          label="New password"
+          leftIcon="key"
+          leftIconSet="fa"
           value={password}
           onChangeText={setPassword}
           placeholder="New password"
-          secureTextEntry={!showPassword}
+          secureTextEntry
           autoCapitalize="none"
-          placeholderTextColor={Colors.tintGray}
-          style={{...styles.input, color: 'black', backgroundColor: 'white'}}
         />
-        <TextInput
+        <AppInput
+          label="Confirm new password"
+          leftIcon="key"
+          leftIconSet="fa"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           placeholder="Confirm new password"
-          secureTextEntry={!showPassword}
+          secureTextEntry
           autoCapitalize="none"
-          placeholderTextColor={Colors.tintGray}
-          style={{...styles.input, color: 'black', backgroundColor: 'white'}}
+          error={fieldError || error}
         />
-
-        <TouchableOpacity
-          onPress={() => setShowPassword(v => !v)}
-          style={{marginBottom: 12}}>
-          <Text style={{color: Colors.primary}}>
-            {showPassword ? 'Hide passwords' : 'Show passwords'}
-          </Text>
-        </TouchableOpacity>
-
-        {fieldError ? <Text style={styles.errorText}>{fieldError}</Text> : null}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <TouchableOpacity
           onPress={handleReset}
@@ -101,7 +94,10 @@ const ResetPasswordScreen = ({navigation, route}) => {
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.resetButtonText}>Update password</Text>
+            <Text
+              style={[styles.resetButtonText, {fontFamily: Fonts.semibold}]}>
+              Update password
+            </Text>
           )}
         </TouchableOpacity>
       </View>
