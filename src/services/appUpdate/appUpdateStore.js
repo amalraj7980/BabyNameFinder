@@ -6,12 +6,13 @@ import {markOptionalUpdateSnoozedToday} from './optionalUpdateSnooze';
 
 let phase = 'idle';
 let decision = null;
+let restartReady = false;
 const listeners = new Set();
 
 const emit = () => {
   listeners.forEach(fn => {
     try {
-      fn({phase, decision});
+      fn({phase, decision, restartReady});
     } catch (e) {
       // ignore
     }
@@ -19,7 +20,7 @@ const emit = () => {
 };
 
 export const appUpdateStore = {
-  getState: () => ({phase, decision}),
+  getState: () => ({phase, decision, restartReady}),
   subscribe: listener => {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -48,16 +49,37 @@ export const appUpdateStore = {
     decision = null;
     emit();
   },
+  markRestartReady: () => {
+    restartReady = true;
+    emit();
+  },
+  clearRestartReady: () => {
+    restartReady = false;
+    emit();
+  },
 };
 
-export function useAppUpdateStore() {
+export function useAppUpdateStore(selector) {
   const [state, setState] = useState(appUpdateStore.getState());
   useEffect(() => appUpdateStore.subscribe(setState), []);
+  if (typeof selector === 'function') {
+    return selector({
+      ...state,
+      markChecking: appUpdateStore.markChecking,
+      requireIosUpdate: appUpdateStore.requireIosUpdate,
+      markDone: appUpdateStore.markDone,
+      dismissOptionalIosUpdate: appUpdateStore.dismissOptionalIosUpdate,
+      markRestartReady: appUpdateStore.markRestartReady,
+      clearRestartReady: appUpdateStore.clearRestartReady,
+    });
+  }
   return {
     ...state,
     markChecking: appUpdateStore.markChecking,
     requireIosUpdate: appUpdateStore.requireIosUpdate,
     markDone: appUpdateStore.markDone,
     dismissOptionalIosUpdate: appUpdateStore.dismissOptionalIosUpdate,
+    markRestartReady: appUpdateStore.markRestartReady,
+    clearRestartReady: appUpdateStore.clearRestartReady,
   };
 }

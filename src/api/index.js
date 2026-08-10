@@ -27,6 +27,7 @@ import {
   getReactionCounts,
   getReactedNameIds,
   ensureUserReactionBuckets,
+  flushPendingReactions,
 } from '../services/reactions.service';
 
 export const login = async PAYLOAD => loginWithEmailPassword(PAYLOAD);
@@ -88,4 +89,5 @@ export {
   clearNamesCache,
   startBabyNamesLiveSync,
   ensureUserReactionBuckets,
+  flushPendingReactions,
 };

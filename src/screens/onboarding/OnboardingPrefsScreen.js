@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import React, {useEffect, useState, useCallback, useContext} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, ScrollView} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -16,20 +16,17 @@ import {
   getStylePrefs,
   setStylePrefs,
 } from '../../services/onboardingStorage';
+import {
+  NAME_STYLE_OPTIONS,
+  isStyleLocked,
+} from '../../constants/nameStyleOptions';
+import {AppContext} from '../../context/AppContext';
 
-const STYLE_OPTIONS = [
-  {id: 'classic', label: 'Classic', color: T.colors.accentMint},
-  {id: 'modern', label: 'Modern'},
-  {id: 'vintage', label: 'Vintage Revival'},
-  {id: 'short', label: 'Short & Sweet'},
-  {id: 'neutral', label: 'Gender-Neutral'},
-  {id: 'heritage', label: 'Heritage Collections', locked: true},
-  {id: 'vibe', label: 'Vibe Collections', locked: true},
-  {id: 'premium', label: 'Premium Collections', locked: true},
-];
+const STYLE_OPTIONS = NAME_STYLE_OPTIONS;
 
 const OnboardingPrefsScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
+  const {isPrime} = useContext(AppContext);
   const [boy, setBoy] = useState(true);
   const [girl, setGirl] = useState(false);
   const [stylesSelected, setStylesSelected] = useState(['classic']);
@@ -46,11 +43,19 @@ const OnboardingPrefsScreen = ({navigation}) => {
     })();
   }, []);
 
-  const toggleStyle = useCallback(id => {
-    setStylesSelected(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
-    );
-  }, []);
+  const onStylePress = useCallback(
+    id => {
+      const opt = STYLE_OPTIONS.find(o => o.id === id);
+      if (isStyleLocked(opt, isPrime)) {
+        navigation.navigate('InAppPurchase');
+        return;
+      }
+      setStylesSelected(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+      );
+    },
+    [isPrime, navigation],
+  );
 
   const onContinue = useCallback(async () => {
     await setGenderPrefs({boy, girl});
@@ -119,21 +124,20 @@ const OnboardingPrefsScreen = ({navigation}) => {
         <Text style={styles.helper}>Pick as many as you like.</Text>
 
         <View style={styles.chips}>
-          {STYLE_OPTIONS.map(opt => (
-            <Chip
-              key={opt.id}
-              label={opt.label}
-              locked={opt.locked}
-              selected={!opt.locked && stylesSelected.includes(opt.id)}
-              selectedColor={opt.color || T.colors.primary}
-              onPress={() => toggleStyle(opt.id)}
-            />
-          ))}
-          <Chip
-            label="Browse collections"
-            accent
-            onPress={() => {}}
-          />
+          {STYLE_OPTIONS.map(opt => {
+            const locked = isStyleLocked(opt, isPrime);
+            return (
+              <Chip
+                key={opt.id}
+                label={opt.label}
+                locked={locked}
+                selected={!locked && stylesSelected.includes(opt.id)}
+                selectedColor={opt.color || T.colors.primary}
+                onPress={() => onStylePress(opt.id)}
+              />
+            );
+          })}
+          <Chip label="Browse collections" accent onPress={() => {}} />
         </View>
 
         <Text style={styles.matchCount}>56 names match your preferences.</Text>

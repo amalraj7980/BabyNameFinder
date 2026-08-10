@@ -1,12 +1,13 @@
-import React, {useEffect, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {AppState, StatusBar} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 import {Storage} from '../util';
-import {AuthContextProvider} from '../context/AuthContext';
+import {AuthContext, AuthContextProvider} from '../context/AuthContext';
 import {AppContextProvider} from '../context/AppContext';
 import SplashScreen from '../screens/Auth/SplashScreen';
 import ForceUpdateScreen from '../screens/appUpdate/ForceUpdateScreen';
+import InAppUpdateReadyModal from '../screens/appUpdate/InAppUpdateReadyModal';
 import {linkingConfig} from '../components/DeepLinking';
 import {NetworkProvider} from '../context/NetworkContext';
 import GlobalNetworkNotifier from '../hooks/GlobalNetworkNotifier';
@@ -28,27 +29,43 @@ const RootStack = createStackNavigator();
 const MIN_SPLASH_DURATION = 5000;
 
 const RouteStack = () => {
+  const {authStateLoading, isUserLoggedin} = useContext(AuthContext);
   const [ready, setReady] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(true);
 
   useEffect(() => {
+    if (authStateLoading) {
+      return;
+    }
+    let mounted = true;
     (async () => {
       try {
         const [setupFlag, onboardingDone] = await Promise.all([
           Storage.getAppSetUpComplete(),
           getOnboardingDone(),
         ]);
-        // New Figma onboarding if neither legacy setup nor v2 onboarding completed
-        setNeedsOnboarding(!(setupFlag === 'true' || onboardingDone));
+        // Skip Welcome when onboarding done, legacy setup done, or already logged in.
+        const skip =
+          setupFlag === 'true' || onboardingDone || !!isUserLoggedin;
+        if (mounted) {
+          setNeedsOnboarding(!skip);
+        }
       } catch (e) {
-        setNeedsOnboarding(true);
+        if (mounted) {
+          setNeedsOnboarding(!isUserLoggedin);
+        }
       } finally {
-        setReady(true);
+        if (mounted) {
+          setReady(true);
+        }
       }
     })();
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [authStateLoading, isUserLoggedin]);
 
-  if (!ready) {
+  if (!ready || authStateLoading) {
     return <SplashScreen />;
   }
 
@@ -88,6 +105,14 @@ const ThemedNavigation = () => {
   useEffect(() => {
     const onAppStateChange = next => {
       if (next !== 'active') {
+        void (async () => {
+          try {
+            const {flushPendingReactions} = require('../services/reactionBatch.service');
+            await flushPendingReactions({force: true});
+          } catch (e) {
+            // ignore
+          }
+        })();
         return;
       }
       void reapplyUpdateGateOnForeground();
@@ -131,6 +156,7 @@ const ThemedNavigation = () => {
         theme={themed}>
         <RouteStack />
       </NavigationContainer>
+      <InAppUpdateReadyModal />
     </>
   );
 };

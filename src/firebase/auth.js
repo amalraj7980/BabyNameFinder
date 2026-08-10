@@ -41,5 +41,10 @@ export const signOut = () => auth().signOut();
 export const getEmailAuthCredential = (email, password) =>
   auth.EmailAuthProvider.credential(email, password);
 
+export const GoogleAuthProvider = auth.GoogleAuthProvider;
+
+export const signInWithCredential = (authInstance, credential) =>
+  authInstance.signInWithCredential(credential);
+
 export const linkWithCredential = (user, credential) =>
   user.linkWithCredential(credential);

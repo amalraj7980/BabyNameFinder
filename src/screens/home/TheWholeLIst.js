@@ -84,7 +84,7 @@ const TheWholeLIst = ({navigation, route}) => {
         page: 0,
         startWith: seachfilterDataWholeNames?.firstLetter ?? '',
         endsWith: seachfilterDataWholeNames?.lastLetter ?? '',
-        compoundName: seachfilterDataWholeNames?.compoundLetter ?? true,
+        compoundName: seachfilterDataWholeNames?.compoundLetter ?? false,
         gender: seachfilterDataWholeNames?.gender ?? 'all',
         contains: seachfilterDataWholeNames?.contains ?? '',
         forceRefresh: true,

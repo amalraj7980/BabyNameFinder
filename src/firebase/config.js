@@ -26,6 +26,7 @@ export const FIRESTORE_COLLECTIONS = {
   babyNames: 'baby_names',
   meta: 'meta',
   reactions: 'reactions',
+  partnerSessions: 'partnerSessions',
   /** Remote force/optional update gate (`app_config/version`). */
   appConfig: 'app_config',
 };

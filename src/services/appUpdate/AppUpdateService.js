@@ -184,35 +184,61 @@ function ensureAndroidFlexibleInstallListener() {
   const client = getInAppUpdates();
   const onStatus = event => {
     if (event.status === IAUInstallStatus.DOWNLOADED) {
-      try {
-        client.installUpdate();
-      } catch (error) {
-        console.warn(`${LOG_TAG} installUpdate failed`, error);
-      } finally {
-        client.removeStatusUpdateListener(onStatus);
-        androidStatusListenerAttached = false;
-      }
+      console.log(`${LOG_TAG} Flexible download complete — showing restart prompt`);
+      appUpdateStore.markRestartReady();
+      client.removeStatusUpdateListener(onStatus);
+      androidStatusListenerAttached = false;
+      return;
+    }
+    if (
+      event.status === IAUInstallStatus.CANCELED ||
+      event.status === IAUInstallStatus.FAILED
+    ) {
+      console.warn(`${LOG_TAG} Flexible update ended`, {status: event.status});
+      client.removeStatusUpdateListener(onStatus);
+      androidStatusListenerAttached = false;
     }
   };
   client.addStatusUpdateListener(onStatus);
 }
 
-async function startAndroidPlayUpdate(decision) {
+/** Play Immediate (force) — system full-screen UI. */
+async function startAndroidImmediateUpdate() {
   try {
     const {IAUUpdateKind} = require('sp-react-native-in-app-updates');
-    const client = getInAppUpdates();
-    const updateType =
-      decision.androidUpdateType === 'immediate'
-        ? IAUUpdateKind.IMMEDIATE
-        : IAUUpdateKind.FLEXIBLE;
-
-    if (updateType === IAUUpdateKind.FLEXIBLE) {
-      ensureAndroidFlexibleInstallListener();
-    }
-
-    await client.startUpdate({updateType});
+    await getInAppUpdates().startUpdate({updateType: IAUUpdateKind.IMMEDIATE});
   } catch (error) {
-    console.warn(`${LOG_TAG} Android startUpdate failed`, error);
+    console.warn(`${LOG_TAG} Android immediate startUpdate failed`, error);
+  }
+}
+
+/**
+ * Play Flexible (in-app) download. When finished, store shows restart modal.
+ * Call after the user taps Update on the optional screen.
+ */
+export async function startAndroidFlexibleUpdate() {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+  try {
+    const {IAUUpdateKind} = require('sp-react-native-in-app-updates');
+    ensureAndroidFlexibleInstallListener();
+    await getInAppUpdates().startUpdate({updateType: IAUUpdateKind.FLEXIBLE});
+  } catch (error) {
+    console.warn(`${LOG_TAG} Android flexible startUpdate failed`, error);
+    androidStatusListenerAttached = false;
+    throw error;
+  }
+}
+
+/** Apply a downloaded flexible update, then restart the process. */
+export function installDownloadedAndroidUpdate() {
+  try {
+    getInAppUpdates().installUpdate();
+  } catch (error) {
+    console.warn(`${LOG_TAG} installUpdate failed`, error);
+  } finally {
+    appUpdateStore.clearRestartReady();
   }
 }
 
@@ -306,7 +332,9 @@ export async function reapplyUpdateGateOnForeground() {
     return;
   }
 
-  if (Platform.OS === 'android' && !__DEV__) {
+  // Custom update screen: iOS always; Android optional/flexible always;
+  // Android force only in __DEV__ (Play Immediate handles release force).
+  if (Platform.OS === 'android' && !__DEV__ && nextDecision.severity === 'force') {
     return;
   }
 
@@ -347,22 +375,31 @@ export async function runStartupAppUpdateCheck() {
         decision.severity === 'optional' &&
         (await isOptionalUpdateSnoozedToday())
       ) {
+        console.log(`${LOG_TAG} optional update snoozed`);
         appUpdateStore.markDone();
         return {status: 'continue'};
       }
 
       if (Platform.OS === 'android') {
-        if (__DEV__) {
-          console.log(
-            `${LOG_TAG} DEV: skipping Play update API, showing update screen`,
-            decision,
-          );
-          appUpdateStore.requireIosUpdate(decision);
-          return {status: 'ios_update_required', decision};
+        // Force / Immediate: Play system UI in release; custom screen in __DEV__.
+        if (
+          decision.severity === 'force' ||
+          decision.androidUpdateType === 'immediate'
+        ) {
+          if (__DEV__) {
+            console.log(`${LOG_TAG} DEV: showing force update screen`, decision);
+            appUpdateStore.requireIosUpdate(decision);
+            return {status: 'ios_update_required', decision};
+          }
+          await startAndroidImmediateUpdate();
+          appUpdateStore.markDone();
+          return {status: 'continue'};
         }
-        await startAndroidPlayUpdate(decision);
-        appUpdateStore.markDone();
-        return {status: 'continue'};
+
+        // Flexible / optional → custom UI first (Maybe later / Update now).
+        console.log(`${LOG_TAG} Android flexible → optional update UI`, decision);
+        appUpdateStore.requireIosUpdate(decision);
+        return {status: 'ios_update_required', decision};
       }
 
       appUpdateStore.requireIosUpdate(decision);

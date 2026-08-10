@@ -1,7 +1,23 @@
 /**
- * Likes / dislikes — Firestore reactions/{uid}/likes|dislikes
+ * Likes / dislikes — local-first with batched Firebase sync (every 10 items).
  * Legacy REST parity via api/index.js (likeUser, disLikeUser, getReactions, …)
  */
+import {fetchAllBabyNames} from './babyNames.service';
+import {addLocalFavorite, removeLocalFavorite} from './localFavorites.service';
+import {
+  addLocalDislike,
+  removeLocalDislike,
+  getLocalDislikeIds,
+} from './localDislikes.service';
+import {
+  enqueuePendingLike,
+  enqueuePendingDislike,
+  dequeuePendingLike,
+  dequeuePendingDislike,
+  maybeFlushAfterEnqueue,
+  flushPendingReactions,
+} from './reactionBatch.service';
+import {markPartnerFavorite} from './partner.service';
 import firestore from '@react-native-firebase/firestore';
 import {
   resolveReactionUserId,
@@ -13,7 +29,13 @@ import {
   dislikedNameDocument,
   serverTimestamp,
 } from '../firebase/firestore';
-import {fetchAllBabyNames} from './babyNames.service';
+
+const userFavoriteDoc = (uid, nameId) =>
+  firestore()
+    .collection('users')
+    .doc(String(uid))
+    .collection('favorites')
+    .doc(String(nameId));
 
 const getNameSnapshot = async nameId => {
   try {
@@ -48,115 +70,137 @@ const requireUid = userId => {
   return uid;
 };
 
-const reactionPayload = (id, nameData) => ({
-  nameId: String(id),
-  name: nameData.name || '',
-  gender: nameData.gender || '',
-  origin: nameData.origin || '',
-  meaning: nameData.meaning || '',
-  syllables: nameData.syllables || '',
-  syllableCount: nameData.syllableCount || 1,
-  createdAt: serverTimestamp(),
-});
-
 export const getReactedNameIds = async userId => {
   const uid = resolveReactionUserId(userId);
-  if (!uid) {
-    return {likedIds: [], dislikedIds: [], allIds: []};
+  let likedIds = [];
+  let dislikedIds = [];
+  if (uid) {
+    try {
+      const [likesSnap, dislikesSnap] = await Promise.all([
+        likedNamesCollection(uid).get(),
+        dislikedNamesCollection(uid).get(),
+      ]);
+      likedIds = likesSnap.docs.map(d => d.id).filter(id => id !== '_meta');
+      dislikedIds = dislikesSnap.docs.map(d => d.id);
+    } catch (e) {
+      console.log('getReactedNameIds error:', e?.message || e);
+    }
   }
+  // Merge local / pending so Discover excludes them before cloud flush
   try {
-    const [likesSnap, dislikesSnap] = await Promise.all([
-      likedNamesCollection(uid).get(),
-      dislikedNamesCollection(uid).get(),
-    ]);
-    const likedIds = likesSnap.docs.map(d => d.id);
-    const dislikedIds = dislikesSnap.docs.map(d => d.id);
-    return {
-      likedIds,
-      dislikedIds,
-      allIds: [...likedIds, ...dislikedIds],
-    };
+    const {getLocalFavoriteIds} = require('./localFavorites.service');
+    const localLikes = await getLocalFavoriteIds();
+    const localDislikes = await getLocalDislikeIds();
+    likedIds = [...new Set([...likedIds, ...localLikes])];
+    dislikedIds = [...new Set([...dislikedIds, ...localDislikes])];
   } catch (e) {
-    console.log('getReactedNameIds error:', e?.message || e);
-    return {likedIds: [], dislikedIds: [], allIds: []};
+    // ignore
   }
+  return {
+    likedIds,
+    dislikedIds,
+    allIds: [...new Set([...likedIds, ...dislikedIds])],
+  };
 };
 
-/** Always add like (swipe / move from dislike). Removes dislike if present. */
+/** Always add like — local immediate; Firebase when pending likes ≥ 10. */
 export const likeName = async ({userId, nameId, toggle = false}) => {
-  const uid = requireUid(userId);
   const id = String(nameId);
+  const nameData = await getNameSnapshot(id);
+
   try {
-    const likeDoc = likedNameDocument(uid, id);
     if (toggle) {
-      const existing = await likeDoc.get();
-      if (existing.exists) {
-        await likeDoc.delete();
+      const {toggleLocalFavorite} = require('./localFavorites.service');
+      const result = await toggleLocalFavorite(id);
+      if (!result.favorited) {
+        await removeLocalDislike(id).catch(() => {});
+        await dequeuePendingLike(id).catch(() => {});
+        try {
+          const uid = resolveReactionUserId(userId);
+          if (uid) {
+            await likedNameDocument(uid, id).delete().catch(() => {});
+            await userFavoriteDoc(uid, id).delete().catch(() => {});
+          }
+          await markPartnerFavorite(id, false).catch(() => {});
+        } catch (e) {
+          // ignore cloud
+        }
         return {liked: false, status: 'success'};
       }
+    } else {
+      await addLocalFavorite(id);
     }
-    const nameData = await getNameSnapshot(id);
-    const batch = firestore().batch();
-    batch.set(likeDoc, reactionPayload(id, nameData));
-    batch.delete(dislikedNameDocument(uid, id));
-    await batch.commit();
-    try {
-      const {trackSuccessfulLike} = require('./rating/ratingService');
-      void trackSuccessfulLike();
-    } catch (e) {
-      // rating optional
-    }
-    return {liked: true, status: 'success'};
+    await removeLocalDislike(id).catch(() => {});
+    await dequeuePendingDislike(id).catch(() => {});
   } catch (e) {
-    console.log('likeName error:', e?.message || e);
-    if (typeof e === 'string') {
-      throw e;
-    }
-    throw 'Unable to save like. Please try again.';
+    // continue
   }
+
+  const pendingCount = await enqueuePendingLike(id, nameData);
+  await maybeFlushAfterEnqueue({userId, side: 'like'});
+
+  try {
+    const {trackSuccessfulLike} = require('./rating/ratingService');
+    void trackSuccessfulLike();
+  } catch (e) {
+    // rating optional
+  }
+
+  return {
+    liked: true,
+    status: 'success',
+    pending: pendingCount < 10,
+    pendingCount,
+  };
 };
 
 /** Toggle favorite (TheWholeLIst heart). */
 export const toggleLikeName = async payload =>
   likeName({...payload, toggle: true});
 
-/** Always add dislike. Removes like if present. */
+/** Always add dislike — local immediate; Firebase when pending dislikes ≥ 10. */
 export const dislikeName = async ({userId, nameId}) => {
-  const uid = requireUid(userId);
   const id = String(nameId);
-  try {
-    const nameData = await getNameSnapshot(id);
-    const batch = firestore().batch();
-    batch.set(dislikedNameDocument(uid, id), reactionPayload(id, nameData));
-    batch.delete(likedNameDocument(uid, id));
-    await batch.commit();
-    return {disliked: true, status: 'success'};
-  } catch (e) {
-    console.log('dislikeName error:', e?.message || e);
-    if (typeof e === 'string') {
-      throw e;
-    }
-    throw 'Unable to save dislike. Please try again.';
-  }
+  const nameData = await getNameSnapshot(id);
+
+  await removeLocalFavorite(id).catch(() => {});
+  await addLocalDislike(id).catch(() => {});
+  await dequeuePendingLike(id).catch(() => {});
+
+  const pendingCount = await enqueuePendingDislike(id, nameData);
+  await maybeFlushAfterEnqueue({userId, side: 'dislike'});
+
+  return {
+    disliked: true,
+    status: 'success',
+    pending: pendingCount < 10,
+    pendingCount,
+  };
 };
 
 /** Undo like — delete like doc only. */
 export const removeLike = async ({userId, nameId}) => {
-  const uid = requireUid(userId);
   const id = String(nameId);
+  await removeLocalFavorite(id).catch(() => {});
+  await dequeuePendingLike(id).catch(() => {});
+  await markPartnerFavorite(id, false).catch(() => {});
   try {
+    const uid = requireUid(userId);
     await likedNameDocument(uid, id).delete();
+    await userFavoriteDoc(uid, id).delete().catch(() => {});
     return {liked: false, status: 'success'};
   } catch (e) {
     console.log('removeLike error:', e?.message || e);
-    throw 'Unable to undo like.';
+    return {liked: false, status: 'success', offline: true};
   }
 };
 
 /** Undo dislike — delete dislike doc only. */
 export const removeDislike = async ({userId, nameId}) => {
-  const uid = requireUid(userId);
   const id = String(nameId);
+  await removeLocalDislike(id).catch(() => {});
+  await dequeuePendingDislike(id).catch(() => {});
+  const uid = requireUid(userId);
   try {
     await dislikedNameDocument(uid, id).delete();
     return {disliked: false, status: 'success'};
@@ -208,8 +252,9 @@ const applyListFilters = (names, filters = {}) => {
         return false;
       }
     }
-    if (compoundName === false || compoundName === 'false') {
-      if (/\s|-/.test(item.name || '')) {
+    if (compoundName === true || compoundName === 'true') {
+      const isCompound = /\s|-/.test(item.name || '');
+      if (!isCompound) {
         return false;
       }
     }
@@ -230,49 +275,80 @@ const mapReactionDoc = d => {
   };
 };
 
-/** Legacy shape: { likes, disLikes } */
+/** Legacy shape: { likes, disLikes } — merges guest local favorites. */
 export const getUserReactions = async (userId, filters = {}) => {
   const uid = resolveReactionUserId(userId);
-  if (!uid) {
-    return {likes: [], disLikes: []};
+  let likes = [];
+  let disLikes = [];
+  if (uid) {
+    try {
+      const [likesSnap, dislikesSnap] = await Promise.all([
+        likedNamesCollection(uid).get(),
+        dislikedNamesCollection(uid).get(),
+      ]);
+      likes = likesSnap.docs
+        .filter(d => d.id !== '_meta')
+        .map(mapReactionDoc);
+      disLikes = dislikesSnap.docs.map(mapReactionDoc);
+    } catch (e) {
+      console.log('getUserReactions error:', e?.message || e);
+    }
   }
   try {
-    const [likesSnap, dislikesSnap] = await Promise.all([
-      likedNamesCollection(uid).get(),
-      dislikedNamesCollection(uid).get(),
-    ]);
-    let likes = likesSnap.docs.map(mapReactionDoc);
-    let disLikes = dislikesSnap.docs.map(mapReactionDoc);
-    likes = applyListFilters(likes, filters);
-    disLikes = applyListFilters(disLikes, filters);
-    const page = Number(filters.page ?? 0);
-    const pageCount = Number(filters.pageCount ?? 1000);
-    const slice = list =>
-      list.slice(page * pageCount, page * pageCount + pageCount);
-    return {likes: slice(likes), disLikes: slice(disLikes)};
+    const {getFavoriteNameCards} = require('./favorites.service');
+    const localCards = await getFavoriteNameCards({
+      userId: uid,
+      isLoggedIn: false,
+    });
+    const existing = new Set(likes.map(l => String(l.id)));
+    localCards.forEach(card => {
+      if (!existing.has(String(card.id))) {
+        likes.push({
+          id: card.id,
+          name: card.name || '',
+          gender: card.gender || '',
+          origin: card.origin || '',
+          meaning: card.meaning || '',
+          syllables: card.syllables || '',
+          syllableCount: card.syllableCount || 1,
+        });
+      }
+    });
   } catch (e) {
-    console.log('getUserReactions error:', e?.message || e);
-    return {likes: [], disLikes: []};
+    // ignore
   }
+  likes = applyListFilters(likes, filters);
+  disLikes = applyListFilters(disLikes, filters);
+  const page = Number(filters.page ?? 0);
+  const pageCount = Number(filters.pageCount ?? 1000);
+  const slice = list =>
+    list.slice(page * pageCount, page * pageCount + pageCount);
+  return {likes: slice(likes), disLikes: slice(disLikes)};
 };
 
 /** Legacy shape: { likes, disLikes } */
 export const getReactionCounts = async userId => {
   const uid = resolveReactionUserId(userId);
-  if (!uid) {
-    return {likes: 0, disLikes: 0};
-  }
   try {
+    const {getLocalFavoriteIds} = require('./localFavorites.service');
+    const localLikes = await getLocalFavoriteIds();
+    const localDislikes = await getLocalDislikeIds();
+    if (!uid) {
+      return {likes: localLikes.length, disLikes: localDislikes.length};
+    }
     const [likesSnap, dislikesSnap] = await Promise.all([
       likedNamesCollection(uid).get(),
       dislikedNamesCollection(uid).get(),
     ]);
+    const cloudLikes = likesSnap.docs.filter(d => d.id !== '_meta').length;
     return {
-      likes: likesSnap.size,
-      disLikes: dislikesSnap.size,
+      likes: Math.max(cloudLikes, localLikes.length),
+      disLikes: Math.max(dislikesSnap.size, localDislikes.length),
     };
   } catch (e) {
     console.log('getReactionCounts error:', e?.message || e);
     return {likes: 0, disLikes: 0};
   }
 };
+
+export {flushPendingReactions};

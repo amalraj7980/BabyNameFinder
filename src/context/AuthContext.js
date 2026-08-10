@@ -11,16 +11,21 @@ import {
   ensureFirebaseSession,
   toSessionPayload,
   loginWithEmailPassword,
+  loginWithGoogle,
   signupWithEmailPassword,
   resetPasswordWithEmail,
   confirmPasswordResetCode,
   resendEmailVerification,
   refreshAuthUser,
+  updateUserDisplayName,
+  completeAuthenticatedEntry,
 } from '../services/auth.service';
 import {onAuthStateChanged, getCurrentUser} from '../firebase/auth';
+import {configureGoogleSignIn} from '../services/googleSignIn.service';
 import {isPasswordResetLink, parseAuthDeepLink} from '../firebase/deepLink';
 import {Storage} from '../util';
 import {navigateToResetPassword} from '../routes/navigationRef';
+import {getDisplayName as getLocalDisplayName} from '../services/onboardingStorage';
 
 const initialAuthState = {
   authStateLoading: true,
@@ -45,23 +50,41 @@ export const AuthContextProvider = ({children}) => {
 
   const clearError = () => setAuthError(null);
 
-  const applySession = session => {
+  const applySession = async session => {
     if (!session?.userId) {
       setVal({...initialAuthState, authStateLoading: false});
       return;
     }
     Storage.setUserID(session.userId);
     Storage.setUserAccessToken(session.token);
+
+    let displayName = session.displayName || null;
+    // Guest / anonymous: never keep a logged-in account name bound in UI
+    if (!session.isUserLoggedin || session.isAnonymous) {
+      displayName = null;
+    } else if (!displayName) {
+      try {
+        displayName = (await getLocalDisplayName()) || null;
+      } catch (e) {
+        // ignore
+      }
+    }
+
     setVal({
       access_token: session.token,
       userId: session.userId,
-      email: session.email || null,
-      displayName: session.displayName || null,
+      email: session.isUserLoggedin ? session.email || null : null,
+      displayName,
       emailVerified: !!session.emailVerified,
       isAnonymous: !!session.isAnonymous,
       isUserLoggedin: !!session.isUserLoggedin,
       authStateLoading: false,
     });
+
+    // Returning logged-in users should not see Welcome again.
+    if (session.isUserLoggedin) {
+      void completeAuthenticatedEntry(getCurrentUser());
+    }
   };
 
   const loginUser = (userId, access_token) => {
@@ -92,6 +115,10 @@ export const AuthContextProvider = ({children}) => {
   }, []);
 
   useEffect(() => {
+    configureGoogleSignIn();
+  }, []);
+
+  useEffect(() => {
     let unsubscribe = () => {};
 
     const boot = async () => {
@@ -110,11 +137,11 @@ export const AuthContextProvider = ({children}) => {
       try {
         if (!user) {
           const session = await ensureFirebaseSession();
-          applySession(session);
+          await applySession(session);
           return;
         }
         const session = await toSessionPayload(user);
-        applySession(session);
+        await applySession(session);
       } catch (e) {
         console.log('onAuthStateChanged error:', e?.message || e);
         setVal(prev => ({...prev, authStateLoading: false}));
@@ -145,8 +172,14 @@ export const AuthContextProvider = ({children}) => {
 
   const logoutUser = async () => {
     try {
+      try {
+        const {flushPendingReactions} = require('../services/reactionBatch.service');
+        await flushPendingReactions({force: true});
+      } catch (e) {
+        console.warn('Flush before logout skipped:', e?.message || e);
+      }
       const session = await logoutFirebase();
-      applySession(session);
+      await applySession(session);
       setLoginOccurred(false);
     } catch (e) {
       console.log('Firebase logout error:', e);
@@ -155,10 +188,18 @@ export const AuthContextProvider = ({children}) => {
     }
   };
 
+  const updateDisplayName = async name => {
+    const session = await updateUserDisplayName(name);
+    if (session) {
+      await applySession(session);
+    }
+    return session;
+  };
+
   const checkAuthState = async () => {
     try {
       const session = await ensureFirebaseSession();
-      applySession(session);
+      await applySession(session);
     } catch (e) {
       setVal(prev => ({...prev, authStateLoading: false}));
     }
@@ -177,11 +218,25 @@ export const AuthContextProvider = ({children}) => {
     clearError();
     try {
       const response = await loginWithEmailPassword({email, password});
-      applySession(response);
+      await applySession(response);
       setLoginOccurred(true);
       return response;
     } catch (e) {
       const message = typeof e === 'string' ? e : e?.message || 'Login failed.';
+      setAuthError(message);
+      throw message;
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    clearError();
+    try {
+      const response = await loginWithGoogle();
+      await applySession(response);
+      setLoginOccurred(true);
+      return response;
+    } catch (e) {
+      const message = typeof e === 'string' ? e : e?.message || 'Google sign-in failed.';
       setAuthError(message);
       throw message;
     }
@@ -199,7 +254,7 @@ export const AuthContextProvider = ({children}) => {
       setAuthError(result.message);
       return result;
     }
-    applySession(result);
+    await applySession(result);
     setLoginOccurred(true);
     return result;
   };
@@ -230,7 +285,7 @@ export const AuthContextProvider = ({children}) => {
     try {
       const session = await refreshAuthUser();
       if (session) {
-        applySession(session);
+        await applySession(session);
         return !!session.emailVerified;
       }
       return false;
@@ -255,6 +310,7 @@ export const AuthContextProvider = ({children}) => {
     () => ({
       ...val,
       loginUserWithCredentials,
+      signInWithGoogle,
       signUpWithCredentials,
       sendPasswordReset,
       resetPassword,
@@ -263,6 +319,7 @@ export const AuthContextProvider = ({children}) => {
       checkAuthState,
       loginUser,
       logoutUser,
+      updateDisplayName,
       loginOccurred,
       appSetupComplete,
       setAppSetupComplete,
@@ -276,6 +333,7 @@ export const AuthContextProvider = ({children}) => {
     [
       val,
       loginUserWithCredentials,
+      signInWithGoogle,
       signUpWithCredentials,
       sendPasswordReset,
       resetPassword,
@@ -284,6 +342,7 @@ export const AuthContextProvider = ({children}) => {
       checkAuthState,
       loginUser,
       logoutUser,
+      updateDisplayName,
       loginOccurred,
       appSetupComplete,
       checkAppSetup,

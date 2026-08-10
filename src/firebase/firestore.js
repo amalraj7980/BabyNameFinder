@@ -89,15 +89,43 @@ export const mapNameDoc = docSnap => {
     gender = 'Unisex';
   }
 
+  const origin =
+    typeof data.origin === 'string'
+      ? data.origin
+      : data.origin?.name || '';
+  const meaning =
+    data.meaning ||
+    (typeof data.origin === 'object' ? data.origin?.description : '') ||
+    '';
+  const syllables =
+    (typeof data.syllables === 'string' && data.syllables) ||
+    (typeof data.pronunciation === 'string' && data.pronunciation) ||
+    data.pronunciation?.text ||
+    data.name ||
+    '';
+
   return {
     ...data,
     id,
     key: id,
     name: data.name ?? '',
     gender,
-    origin: data.origin ?? '',
-    meaning: data.meaning ?? '',
-    syllables: data.syllables ?? data.name ?? '',
+    origin,
+    meaning,
+    syllables,
     syllableCount,
+    pronunciation:
+      typeof data.pronunciation === 'string'
+        ? data.pronunciation
+        : data.pronunciation?.text || syllables,
+    funFacts: Array.isArray(data.funFacts) ? data.funFacts : [],
+    famousPeople: Array.isArray(data.famousPeople) ? data.famousPeople : [],
+    variations: Array.isArray(data.variations) ? data.variations : [],
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    popularity:
+      data.popularity && typeof data.popularity === 'object'
+        ? data.popularity
+        : {},
+    status: data.status || 'published',
   };
 };

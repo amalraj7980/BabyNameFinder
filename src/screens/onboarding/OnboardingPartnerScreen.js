@@ -7,6 +7,7 @@ import {
   Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -19,21 +20,20 @@ import {
   BrandMark,
   ScreenScaffold,
 } from '../../components/ui/DesignSystem';
+import {markAppEntered} from '../../services/onboardingStorage';
 import {
-  getOrCreatePartnerCode,
-  setOnboardingDone,
-  setPartnerLinked,
-} from '../../services/onboardingStorage';
-import {Storage} from '../../util';
+  createPartnerSession,
+  joinPartnerSession,
+} from '../../services/partner.service';
 
 const OnboardingPartnerScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
   const [codeModal, setCodeModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const finish = useCallback(async () => {
-    await setOnboardingDone(true);
-    await Storage.setAppSetUpComplete('true');
+    await markAppEntered();
     const parent = navigation.getParent();
     if (parent) {
       parent.reset({
@@ -49,26 +49,52 @@ const OnboardingPartnerScreen = ({navigation}) => {
   }, [navigation]);
 
   const invitePartner = useCallback(async () => {
-    try {
-      const code = await getOrCreatePartnerCode();
-      await Share.open({
-        title: 'Invite your partner',
-        message: `Join me on Baby Names Together! Use code ${code} to start matching names together.`,
-      });
-    } catch (e) {
-      // cancelled
-    }
-  }, []);
-
-  const joinWithCode = useCallback(async () => {
-    if (joinCode.trim().length < 4) {
-      Alert.alert('Enter a valid invite code');
+    if (busy) {
       return;
     }
-    await setPartnerLinked(true);
-    setCodeModal(false);
-    await finish();
-  }, [joinCode, finish]);
+    setBusy(true);
+    try {
+      const session = await createPartnerSession();
+      const code = session.joinCode || '';
+      try {
+        await Share.open({
+          title: 'Invite your partner',
+          message: `Join me on Baby Names Together! Use code ${code} to start matching names together.`,
+        });
+      } catch (shareErr) {
+        // User cancelled share sheet — session + code still created on backend
+      }
+    } catch (e) {
+      Alert.alert(
+        'Could not create invite',
+        e?.message ||
+          'Check your connection. Guests need Anonymous Auth enabled in Firebase.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  const joinWithCode = useCallback(async () => {
+    if (busy) {
+      return;
+    }
+    const code = joinCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      Alert.alert('Enter a valid 6-digit invite code');
+      return;
+    }
+    setBusy(true);
+    try {
+      await joinPartnerSession(code);
+      setCodeModal(false);
+      await finish();
+    } catch (e) {
+      Alert.alert('Could not join', e?.message || 'Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, joinCode, finish]);
 
   return (
     <ScreenScaffold>
@@ -83,15 +109,23 @@ const OnboardingPartnerScreen = ({navigation}) => {
         <BrandMark size={72} />
         <Text style={styles.heading}>Better together</Text>
         <Text style={styles.sub}>
-          Invite your partner to start matching. You can also swipe solo and
-          connect later.
+          Invite your partner to start matching. Works for guests too — share a
+          6-digit code, then both of you like names and see matches. You can
+          also swipe solo and connect later.
         </Text>
+        {busy ? (
+          <ActivityIndicator
+            style={styles.spinner}
+            color={T.colors.primary}
+          />
+        ) : null}
       </View>
 
       <View style={[styles.footer, {paddingBottom: Math.max(insets.bottom, 16)}]}>
         <PrimaryButton
           title="Invite Partner"
           onPress={invitePartner}
+          disabled={busy}
           icon={
             <Ionicons name="share-outline" size={18} color={T.colors.textOnPrimary} />
           }
@@ -101,9 +135,12 @@ const OnboardingPartnerScreen = ({navigation}) => {
           title="Continue Without Partner"
           variant="outline"
           onPress={finish}
+          disabled={busy}
           style={styles.mb}
         />
-        <TouchableOpacity onPress={() => setCodeModal(true)}>
+        <TouchableOpacity
+          disabled={busy}
+          onPress={() => setCodeModal(true)}>
           <Text style={styles.link}>I have a code</Text>
         </TouchableOpacity>
       </View>
@@ -112,22 +149,32 @@ const OnboardingPartnerScreen = ({navigation}) => {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Enter invite code</Text>
+            <Text style={styles.modalHint}>6-digit code from your partner</Text>
             <TextInput
               value={joinCode}
               onChangeText={setJoinCode}
-              autoCapitalize="characters"
-              placeholder="XM5XV8"
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="482913"
               placeholderTextColor={T.colors.textTertiary}
               style={styles.modalInput}
             />
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalBtn}
+                disabled={busy}
                 onPress={() => setCodeModal(false)}>
                 <Text style={styles.modalCancel}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtn} onPress={joinWithCode}>
-                <Text style={styles.modalOk}>Join</Text>
+              <TouchableOpacity
+                style={styles.modalBtn}
+                disabled={busy}
+                onPress={joinWithCode}>
+                {busy ? (
+                  <ActivityIndicator color={T.colors.primary} />
+                ) : (
+                  <Text style={styles.modalOk}>Join</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -167,6 +214,9 @@ const styles = StyleSheet.create({
     color: T.colors.textSecondary,
     textAlign: 'center',
   },
+  spinner: {
+    marginTop: 20,
+  },
   footer: {
     paddingHorizontal: 24,
   },
@@ -195,8 +245,15 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: 18,
     color: T.colors.textPrimary,
-    marginBottom: 12,
+    marginBottom: 6,
     textAlign: 'center',
+  },
+  modalHint: {
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    color: T.colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   modalInput: {
     borderWidth: 1,

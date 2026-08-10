@@ -1,15 +1,9 @@
 import React, {useEffect, useState, useContext} from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
-import {Colors} from '../../styles';
+import {Text, Pressable, ActivityIndicator, View} from 'react-native';
 import {AuthContext} from '../../context/AuthContext';
-import SafeScreen from '../../components/SafeScreen';
-import {styles} from './forgotPasswordScreenStyles';
 import {navigateToHome} from '../../routes/navigationRef';
+import AuthScreenLayout from './AuthScreenLayout';
+import {authStyles} from './authStyles';
 
 const POLL_INTERVAL_MS = 5000;
 const RESEND_COOLDOWN_MS = 60000;
@@ -99,70 +93,68 @@ const EmailVerificationScreen = ({navigation}) => {
   };
 
   return (
-    <SafeScreen backgroundColor={Colors.primary}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Verify your email</Text>
-        <Text style={styles.description}>
-          We sent a verification link to your Gmail / inbox. Open it to activate
-          your account.
+    <AuthScreenLayout
+      showBrand={false}
+      heroTitle="Verify your email"
+      heroSubtitle="We sent a verification link to your inbox. Open it to activate your account.">
+      <View
+        style={{
+          backgroundColor: '#FFF8F2',
+          borderRadius: 12,
+          padding: 14,
+          marginBottom: 14,
+          borderWidth: 1,
+          borderColor: '#F0E8E2',
+        }}>
+        <Text style={authStyles.footerText}>Email</Text>
+        <Text style={[authStyles.heroSubtitle, {color: '#2C3340', fontWeight: '600'}]}>
+          {email || '—'}
         </Text>
-
-        <View
-          style={{
-            backgroundColor: Colors.lightGray,
-            borderRadius: 8,
-            padding: 14,
-            marginBottom: 16,
-          }}>
-          <Text style={{color: Colors.textLight, marginBottom: 4}}>Email</Text>
-          <Text style={{color: Colors.textGray, fontWeight: '600'}}>
-            {email || '—'}
-          </Text>
-        </View>
-
-        <Text style={[styles.description, {marginBottom: 8}]}>
-          1. Open the email from Firebase / Baby Names{'\n'}
-          2. Tap the verification link{'\n'}
-          3. Return here and tap “I’ve verified”
-        </Text>
-        <Text style={[styles.description, {fontSize: 13}]}>
-          Check spam if you don’t see it within a minute.
-        </Text>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {localMessage ? (
-          <Text style={{color: Colors.Boy, marginBottom: 10}}>{localMessage}</Text>
-        ) : null}
-
-        <TouchableOpacity
-          onPress={handleContinue}
-          style={[styles.resetButton, loading ? styles.disabledButton : null]}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.resetButtonText}>I’ve verified</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleResend}
-          disabled={loading || resendCooldown > 0}
-          style={{marginTop: 18, alignItems: 'center'}}>
-          <Text style={{color: Colors.primary, fontWeight: '600'}}>
-            {resendCooldown > 0
-              ? `Resend in ${resendCooldown}s`
-              : 'Resend verification email'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleSignOut}
-          style={{marginTop: 24, alignItems: 'center'}}>
-          <Text style={{color: Colors.textLight}}>Sign out</Text>
-        </TouchableOpacity>
       </View>
-    </SafeScreen>
+
+      <Text style={[authStyles.heroSubtitle, {marginBottom: 8}]}>
+        1. Open the email from Firebase / Baby Names{'\n'}
+        2. Tap the verification link{'\n'}
+        3. Return here and tap “I’ve verified”
+      </Text>
+      <Text style={[authStyles.legalText, {marginTop: 0, marginBottom: 12}]}>
+        Check spam if you don’t see it within a minute.
+      </Text>
+
+      {error ? <Text style={authStyles.formError}>{error}</Text> : null}
+      {localMessage ? <Text style={authStyles.formSuccess}>{localMessage}</Text> : null}
+
+      <Pressable
+        onPress={handleContinue}
+        style={[
+          authStyles.primaryButton,
+          loading ? authStyles.primaryButtonDisabled : null,
+        ]}
+        disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={authStyles.primaryButtonText}>I’ve verified</Text>
+        )}
+      </Pressable>
+
+      <Pressable
+        onPress={handleResend}
+        disabled={loading || resendCooldown > 0}
+        style={{marginTop: 18, alignItems: 'center'}}>
+        <Text style={authStyles.footerLink}>
+          {resendCooldown > 0
+            ? `Resend in ${resendCooldown}s`
+            : 'Resend verification email'}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={handleSignOut}
+        style={{marginTop: 24, alignItems: 'center'}}>
+        <Text style={authStyles.footerText}>Sign out</Text>
+      </Pressable>
+    </AuthScreenLayout>
   );
 };
 

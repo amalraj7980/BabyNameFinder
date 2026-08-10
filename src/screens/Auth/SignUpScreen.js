@@ -1,28 +1,30 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect, useContext, useRef} from 'react';
 import {
-  View,
   Text,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
-  TouchableWithoutFeedback,
-  Keyboard,
   Linking,
 } from 'react-native';
-import {Colors, Fonts} from '../../styles';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
+import {Flash} from '../../util';
 import CustomPopup from '../../components/CustomPopup';
 import AppInput from '../../components/AppInput';
-import SafeScreen from '../../components/SafeScreen';
-import {styles} from './signUpScreenStyles';
 import {validateRegisterForm} from '../../utils/authValidation';
+import AuthScreenLayout from './AuthScreenLayout';
+import AuthSocialFooter from './AuthSocialFooter';
+import {authStyles} from './authStyles';
 
 const SignUpScreen = ({navigation}) => {
   const {
     locale: {locale},
   } = useContext(AppContext);
-  const {signUpWithCredentials, clearError, error: authError} =
-    useContext(AuthContext);
+  const {
+    signUpWithCredentials,
+    signInWithGoogle,
+    clearError,
+    error: authError,
+  } = useContext(AuthContext);
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -30,8 +32,13 @@ const SignUpScreen = ({navigation}) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fieldError, setFieldError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [isErrorPopupVisible, setIsErrorPopupVisible] = useState(false);
   const [signupError, setSignupError] = useState();
+  const googleSubmittingRef = useRef(false);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
 
   const privacyPolicyUrl =
     'https://riafy.me/wellness/privacy.php?appname=Baby%20Names%20App';
@@ -52,7 +59,7 @@ const SignUpScreen = ({navigation}) => {
       unsubscribe();
       setLoading(false);
     };
-  }, [navigation]);
+  }, [navigation, clearError]);
 
   const signupHandler = async () => {
     clearError?.();
@@ -92,118 +99,153 @@ const SignUpScreen = ({navigation}) => {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (googleSubmittingRef.current || loading || googleLoading) {
+      return;
+    }
+    clearError?.();
+    googleSubmittingRef.current = true;
+    setGoogleLoading(true);
+    try {
+      const session = await signInWithGoogle();
+      if (session?.userId) {
+        navigation.getParent()?.navigate('MainTabs');
+      }
+    } catch (e) {
+      const message =
+        typeof e === 'string' ? e : e?.message || 'Google sign-in failed';
+      const lower = String(message).toLowerCase();
+      if (lower.includes('cancel') || lower.includes('cancelled')) {
+        return;
+      }
+      Flash.showError(message);
+    } finally {
+      googleSubmittingRef.current = false;
+      setGoogleLoading(false);
+    }
+  };
+
+  const busy = loading || googleLoading;
+  const canSubmit =
+    validateRegisterForm({
+      fullName,
+      email,
+      password,
+      confirmPassword,
+    }).valid && !busy;
+
   return (
-    <SafeScreen backgroundColor={Colors.primary}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
-          <Text
-            style={{
-              fontFamily: Fonts.bold,
-              fontSize: 22,
-              color: Colors.WHITE,
-              alignSelf: 'flex-start',
-              marginTop: 12,
-              marginBottom: 8,
-            }}>
-            Create account
+    <AuthScreenLayout
+      compact
+      showBack
+      onBack={() => navigation.goBack()}
+      heroTitle="Create account"
+      heroSubtitle="Save favorites and invite your partner.">
+      <AppInput
+        label="Full name"
+        leftIcon="person"
+        value={fullName}
+        onChangeText={setFullName}
+        placeholder="Full name"
+        autoCapitalize="words"
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => emailRef.current?.focus?.()}
+      />
+
+      <AppInput
+        ref={emailRef}
+        label={locale?.placeholder?.email || 'Email'}
+        leftIcon="mail"
+        value={email}
+        onChangeText={setEmail}
+        placeholder={locale?.placeholder?.email || 'Email'}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => passwordRef.current?.focus?.()}
+      />
+
+      <AppInput
+        ref={passwordRef}
+        label={locale?.placeholder?.password || 'Password'}
+        leftIcon="key"
+        leftIconSet="fa"
+        value={password}
+        onChangeText={setPassword}
+        placeholder={locale?.placeholder?.password || 'Password'}
+        secureTextEntry
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => confirmRef.current?.focus?.()}
+      />
+
+      <AppInput
+        ref={confirmRef}
+        label={locale?.placeholder?.confirmPassword || 'Confirm password'}
+        leftIcon="key"
+        leftIconSet="fa"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        placeholder={
+          locale?.placeholder?.confirmPassword || 'Confirm password'
+        }
+        secureTextEntry
+        returnKeyType="done"
+        onSubmitEditing={signupHandler}
+        error={fieldError || authError}
+      />
+
+      <Pressable
+        style={[
+          authStyles.primaryButton,
+          !canSubmit ? authStyles.primaryButtonDisabled : null,
+        ]}
+        onPress={signupHandler}
+        disabled={!canSubmit}>
+        {loading ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={authStyles.primaryButtonText}>
+            {locale?.lets_go || 'Create account'}
           </Text>
+        )}
+      </Pressable>
 
-          <AppInput
-            label="Full name"
-            leftIcon="person"
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="Full name"
-            autoCapitalize="words"
-          />
+      <AuthSocialFooter
+        message="Already have an account?"
+        actionLabel="Sign in"
+        onPress={() => navigation.navigate('SignIn')}
+        onGooglePress={handleGoogleSignIn}
+        googleDisabled={busy}
+      />
 
-          <AppInput
-            label={locale?.placeholder?.email || 'Email'}
-            leftIcon="mail"
-            value={email}
-            onChangeText={setEmail}
-            placeholder={locale?.placeholder?.email || 'Email'}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+      <Text style={authStyles.legalText}>
+        {locale?.privacyPolicy || 'By continuing you agree to our '}
+        <Text
+          onPress={() => Linking.openURL(TermsAndConditionsUrl)}
+          style={authStyles.legalLink}>
+          Terms of Service
+        </Text>
+        <Text> and </Text>
+        <Text
+          onPress={() => Linking.openURL(privacyPolicyUrl)}
+          style={authStyles.legalLink}>
+          Privacy Policy
+        </Text>
+      </Text>
 
-          <AppInput
-            label={locale?.placeholder?.password || 'Password'}
-            leftIcon="key"
-            leftIconSet="fa"
-            value={password}
-            onChangeText={setPassword}
-            placeholder={locale?.placeholder?.password || 'Password'}
-            secureTextEntry
-          />
-
-          <AppInput
-            label={locale?.placeholder?.confirmPassword || 'Confirm password'}
-            leftIcon="key"
-            leftIconSet="fa"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder={
-              locale?.placeholder?.confirmPassword || 'Confirm password'
-            }
-            secureTextEntry
-            error={fieldError || authError}
-          />
-
-          <TouchableOpacity
-            style={[styles.button, loading ? styles.disabledButton : null]}
-            onPress={signupHandler}
-            disabled={loading}>
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={[styles.buttonText, {fontFamily: Fonts.semibold}]}>
-                {locale?.lets_go || 'Create account'}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <CustomPopup
-            isVisible={isErrorPopupVisible}
-            message={signupError}
-            title={'Error'}
-            style={{width: '90%', height: 200}}
-            onClose={() => setIsErrorPopupVisible(false)}
-            onCancel={() => setIsErrorPopupVisible(false)}
-            cancelText="Cancel"
-          />
-
-          <TouchableOpacity
-            style={{padding: 24}}
-            onPress={() => navigation.navigate('SignIn')}>
-            <Text style={[styles.buttonText, {fontFamily: Fonts.medium}]}>
-              {locale?.alreadyHaveAnAccount || 'Already have an account? Sign in'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={[styles.LinkText, {fontFamily: Fonts.regular}]}>
-            {locale?.privacyPolicy || 'By continuing you agree to our '}
-            <Text
-              onPress={() => Linking.openURL(TermsAndConditionsUrl)}
-              style={[
-                styles.LinkText,
-                {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
-              ]}>
-              Terms of Service
-            </Text>
-            <Text> and </Text>
-            <Text
-              onPress={() => Linking.openURL(privacyPolicyUrl)}
-              style={[
-                styles.LinkText,
-                {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
-              ]}>
-              Privacy Policy
-            </Text>
-          </Text>
-        </View>
-      </TouchableWithoutFeedback>
-    </SafeScreen>
+      <CustomPopup
+        isVisible={isErrorPopupVisible}
+        message={signupError}
+        title={'Error'}
+        style={{width: '90%', height: 200}}
+        onClose={() => setIsErrorPopupVisible(false)}
+        onCancel={() => setIsErrorPopupVisible(false)}
+        cancelText="Cancel"
+      />
+    </AuthScreenLayout>
   );
 };
 

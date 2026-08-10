@@ -72,9 +72,11 @@ const applyFilters = (names, filters = {}) => {
         return false;
       }
     }
-    // compoundName === false → exclude multi-word / hyphenated names
-    if (compoundName === false || compoundName === 'false') {
-      if (/\s|-/.test(item.name || '')) {
+    // No compound filter (false/undefined) → show all names
+    // compoundName true → compound names only (space/hyphen)
+    if (compoundName === true || compoundName === 'true') {
+      const isCompound = /\s|-/.test(item.name || '');
+      if (!isCompound) {
         return false;
       }
     }

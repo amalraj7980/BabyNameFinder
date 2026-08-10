@@ -3140,6 +3140,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@react-native-google-signin/google-signin@npm:^16.1.2":
+  version: 16.1.4
+  resolution: "@react-native-google-signin/google-signin@npm:16.1.4"
+  peerDependencies:
+    expo: ">=52.0.40"
+    react: "*"
+    react-native: "*"
+  peerDependenciesMeta:
+    expo:
+      optional: true
+  checksum: 3e03f8862c0947d67d2efd2fdc371220fd9c8d365ee6c47d29409f1060961b34c8c66b4a77adce76cede0671c7fb6ee9af8dc3b610a2a889cbf9dceb9f1a18e6
+  languageName: node
+  linkType: hard
+
 "@react-native-masked-view/masked-view@npm:^0.3.2":
   version: 0.3.2
   resolution: "@react-native-masked-view/masked-view@npm:0.3.2"
@@ -4140,6 +4154,7 @@ __metadata:
     "@react-native-firebase/app": 22.4.0
     "@react-native-firebase/auth": 22.4.0
     "@react-native-firebase/firestore": 22.4.0
+    "@react-native-google-signin/google-signin": ^16.1.2
     "@react-native-masked-view/masked-view": ^0.3.2
     "@react-native-voice/voice": ^3.2.4
     "@react-native/babel-preset": 0.83.1

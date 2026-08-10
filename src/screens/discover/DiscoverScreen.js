@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 
@@ -38,8 +39,10 @@ import {
   getDisplayName,
   isPartnerLinked,
 } from '../../services/onboardingStorage';
+import {refreshPartnerConnection} from '../../services/partner.service';
 import {speakNamePronunciation} from '../../services/speakPronunciation';
 import {shareBabyName} from '../../services/shareBabyName';
+import {resolveDisplayName} from '../../utils/profileDisplay';
 
 const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
 
@@ -166,16 +169,20 @@ const DiscoverScreen = ({navigation}) => {
     seachfilterData,
     setIsUndoEnabled,
     isUndoEnabled,
+    babyNamesCount,
     setBabyNamesCount,
     discoverCardStyle,
   } = useContext(AppContext);
-  const {userId, firebaseReady, loginOccurred} = useContext(AuthContext);
+  const {userId, firebaseReady, loginOccurred, displayName: authDisplayName, isUserLoggedin} =
+    useContext(AuthContext);
 
   const [babyNamesData, setBabyNamesData] = useState([]);
+  const [cardIndex, setCardIndex] = useState(0);
+  const [deckEpoch, setDeckEpoch] = useState(0);
   const [swipedCards, setSwipedCards] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [displayName, setDisplayNameState] = useState('');
+  const [localName, setLocalName] = useState('');
   const [partnerLinked, setPartnerLinked] = useState(false);
   const [likeCountSession, setLikeCountSession] = useState(0);
   const [notifyModalVisible, setNotifyModalVisible] = useState(false);
@@ -186,27 +193,50 @@ const DiscoverScreen = ({navigation}) => {
   const hasLoadedOnceRef = useRef(false);
   const babyNamesDataRef = useRef(babyNamesData);
   const swipedCardsRef = useRef(swipedCards);
+  const cardIndexRef = useRef(0);
+  const swipingLockRef = useRef(false);
 
   babyNamesDataRef.current = babyNamesData;
   swipedCardsRef.current = swipedCards;
+  cardIndexRef.current = cardIndex;
 
   const cardStyle = discoverCardStyle || 'detailed';
   const isSimple = cardStyle === 'simple';
   const cardHeight = isSimple ? CARD_HEIGHT_SIMPLE : CARD_HEIGHT_DETAILED;
 
   const refreshProfile = useCallback(async () => {
-    const [name, linked] = await Promise.all([
+    const [name, connection] = await Promise.all([
       getDisplayName(),
-      isPartnerLinked(),
+      refreshPartnerConnection().catch(() => null),
     ]);
-    setDisplayNameState(name || '');
-    setPartnerLinked(linked);
+    setLocalName(name || '');
+    if (connection) {
+      setPartnerLinked(!!connection.linked);
+    } else {
+      setPartnerLinked(await isPartnerLinked());
+    }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       void refreshProfile();
     }, [refreshProfile]),
+  );
+
+  useEffect(() => {
+    void refreshProfile();
+  }, [isUserLoggedin, authDisplayName, refreshProfile]);
+
+  const replaceDeck = useCallback(
+    (names, count) => {
+      setBabyNamesData(names || []);
+      setBabyNamesCount(count ?? 0);
+      setCardIndex(0);
+      cardIndexRef.current = 0;
+      setSwipedCards([]);
+      setDeckEpoch(e => e + 1);
+    },
+    [setBabyNamesCount],
   );
 
   const fetchBabyNamesData = useCallback(
@@ -235,8 +265,21 @@ const DiscoverScreen = ({navigation}) => {
         if (requestId !== loadingRequestId.current) {
           return;
         }
-        setBabyNamesData(response.babyNames || []);
-        setBabyNamesCount(response.count ?? 0);
+
+        const names = response.babyNames || [];
+        const count = response.count ?? 0;
+
+        if (silent) {
+          const idx = cardIndexRef.current;
+          const len = babyNamesDataRef.current.length;
+          const midDeck = idx > 0 && idx < len;
+          if (midDeck || swipingLockRef.current) {
+            setBabyNamesCount(count);
+            return;
+          }
+        }
+
+        replaceDeck(names, count);
         hasLoadedOnceRef.current = true;
         setHasLoadedOnce(true);
       } catch (error) {
@@ -247,7 +290,7 @@ const DiscoverScreen = ({navigation}) => {
         }
       }
     },
-    [seachfilterData, userId, setBabyNamesCount],
+    [seachfilterData, userId, replaceDeck],
   );
 
   useEffect(() => {
@@ -282,13 +325,20 @@ const DiscoverScreen = ({navigation}) => {
     [notifyAsked],
   );
 
+  const releaseSwipingLock = useCallback(() => {
+    setTimeout(() => {
+      swipingLockRef.current = false;
+    }, 350);
+  }, []);
+
   const likeuser = useCallback(
-    async id => {
+    async card => {
+      if (!card) {
+        return;
+      }
       try {
-        const PAYLOAD = {userId: userId ?? 0, nameId: id};
-        const swipedCard = babyNamesDataRef.current.find(item => item.id === id);
-        setSwipedCards(state => [...state, {card: swipedCard, action: 'liked'}]);
-        setBabyNamesData(state => state.filter(item => item.id !== id));
+        const PAYLOAD = {userId: userId ?? 0, nameId: card.id};
+        setSwipedCards(state => [...state, {card, action: 'liked'}]);
         await bumpCountDown();
         await likeUser(PAYLOAD);
         setIsUndoEnabled(true);
@@ -305,15 +355,13 @@ const DiscoverScreen = ({navigation}) => {
   );
 
   const disLikeuser = useCallback(
-    async id => {
+    async card => {
+      if (!card) {
+        return;
+      }
       try {
-        const PAYLOAD = {userId: userId ?? 0, nameId: id};
-        const swipedCard = babyNamesDataRef.current.find(item => item.id === id);
-        setSwipedCards(state => [
-          ...state,
-          {card: swipedCard, action: 'disliked'},
-        ]);
-        setBabyNamesData(state => state.filter(item => item.id !== id));
+        const PAYLOAD = {userId: userId ?? 0, nameId: card.id};
+        setSwipedCards(state => [...state, {card, action: 'disliked'}]);
         await bumpCountDown();
         await disLikeUser(PAYLOAD);
         setIsUndoEnabled(true);
@@ -333,27 +381,34 @@ const DiscoverScreen = ({navigation}) => {
     if (!lastSwiped?.card) {
       return;
     }
-    setSwipedCards(stack.slice(0, -1));
+    const nextStack = stack.slice(0, -1);
+    setSwipedCards(nextStack);
     setBabyNamesCount(prev => (typeof prev === 'number' ? prev + 1 : 1));
-    setBabyNamesData(prev => [lastSwiped.card, ...prev]);
+
+    const prevIndex = Math.max(0, cardIndexRef.current - 1);
+    setCardIndex(prevIndex);
+    cardIndexRef.current = prevIndex;
+    swiperRef.current?.swipeBack?.();
 
     const PAYLOAD = {
       userId: userId ?? 0,
       nameId: lastSwiped.card.id,
     };
 
+    const onUndoDone = () => {
+      setIsUndoEnabled(nextStack.length > 0);
+    };
+
     if (lastSwiped.action === 'liked') {
       undoLikeUser(PAYLOAD)
         .then(() => {
-          setIsUndoEnabled(false);
+          onUndoDone();
           setLikeCountSession(prev => Math.max(0, prev - 1));
         })
         .catch(error => console.log('Error undoing like:', error));
     } else if (lastSwiped.action === 'disliked') {
       undoDisLikeUser(PAYLOAD)
-        .then(() => {
-          setIsUndoEnabled(false);
-        })
+        .then(onUndoDone)
         .catch(error => console.log('Error undoing dislike:', error));
     }
   }, [userId, setBabyNamesCount, setIsUndoEnabled]);
@@ -368,32 +423,54 @@ const DiscoverScreen = ({navigation}) => {
   }, []);
 
   const onSwipedLeft = useCallback(
-    cardIndex => {
-      const card = babyNamesDataRef.current[cardIndex];
+    index => {
+      const card = babyNamesDataRef.current[index];
+      const nextIndex = index + 1;
+      setCardIndex(nextIndex);
+      cardIndexRef.current = nextIndex;
+      releaseSwipingLock();
       if (!card) {
         return;
       }
-      disLikeuser(card.id);
+      disLikeuser(card);
     },
-    [disLikeuser],
+    [disLikeuser, releaseSwipingLock],
   );
 
   const onSwipedRight = useCallback(
-    cardIndex => {
-      const card = babyNamesDataRef.current[cardIndex];
+    index => {
+      const card = babyNamesDataRef.current[index];
+      const nextIndex = index + 1;
+      setCardIndex(nextIndex);
+      cardIndexRef.current = nextIndex;
+      releaseSwipingLock();
       if (!card) {
         return;
       }
-      likeuser(card.id);
+      likeuser(card);
     },
-    [likeuser],
+    [likeuser, releaseSwipingLock],
   );
 
   const onPassPress = useCallback(() => {
+    if (swipingLockRef.current) {
+      return;
+    }
+    if (cardIndexRef.current >= babyNamesDataRef.current.length) {
+      return;
+    }
+    swipingLockRef.current = true;
     swiperRef.current?.swipeLeft?.();
   }, []);
 
   const onLikePress = useCallback(() => {
+    if (swipingLockRef.current) {
+      return;
+    }
+    if (cardIndexRef.current >= babyNamesDataRef.current.length) {
+      return;
+    }
+    swipingLockRef.current = true;
     swiperRef.current?.swipeRight?.();
   }, []);
 
@@ -487,10 +564,32 @@ const DiscoverScreen = ({navigation}) => {
   );
 
   const modeLabel = partnerLinked ? 'with partner' : 'solo mode';
-  const headerName = displayName || 'You';
+  const headerName = resolveDisplayName({
+    localName,
+    authDisplayName,
+    isUserLoggedin,
+  });
+  const remainingCount =
+    typeof babyNamesCount === 'number'
+      ? Math.max(0, babyNamesCount)
+      : babyNamesData.length;
+  const countLabel =
+    remainingCount === 1 ? 'name left to discover' : 'names left to discover';
+  const countDisplay = remainingCount.toLocaleString('en-US');
+  const deckExhausted =
+    babyNamesData.length === 0 || cardIndex >= babyNamesData.length;
 
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
+      <LinearGradient
+        colors={[T.colors.background, T.colors.backgroundEnd, '#FFE4D4']}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <View style={styles.blobCoral} pointerEvents="none" />
+      <View style={styles.blobBlue} pointerEvents="none" />
+
       <View style={styles.header}>
         <BrandMark size={36} />
         <Text style={styles.headerMode} numberOfLines={1}>
@@ -503,6 +602,23 @@ const DiscoverScreen = ({navigation}) => {
           accessibilityLabel="Filter names">
           <Ionicons name="options-outline" size={20} color={C.text} />
         </TouchableOpacity>
+      </View>
+
+      <View
+        style={styles.countBanner}
+        accessibilityRole="text"
+        accessibilityLabel={`${remainingCount} ${countLabel}`}>
+        <View style={styles.countGlow} />
+        <View style={styles.countIconWrap}>
+          <Ionicons name="sparkles" size={14} color={C.primary} />
+        </View>
+        <View style={styles.countTextCol}>
+          <Text style={styles.countNumber}>{countDisplay}</Text>
+          <Text style={styles.countCaption}>{countLabel}</Text>
+        </View>
+        <View style={styles.countPill}>
+          <Text style={styles.countPillText}>Live</Text>
+        </View>
       </View>
 
       <View style={styles.deckArea}>
@@ -531,7 +647,7 @@ const DiscoverScreen = ({navigation}) => {
           />
 
           <View style={[styles.swiperWrap, {height: cardHeight}]}>
-            {babyNamesData.length === 0 && !isLoading ? (
+            {deckExhausted && !isLoading ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>No more names</Text>
                 <Text style={styles.emptySub}>
@@ -540,7 +656,7 @@ const DiscoverScreen = ({navigation}) => {
               </View>
             ) : (
               <Swiper
-                key={`swiper-${cardStyle}-${cardHeight}`}
+                key={`swiper-${cardStyle}-${deckEpoch}`}
                 ref={swiperRef}
                 cards={babyNamesData}
                 keyExtractor={swiperKeyExtractor}
@@ -556,6 +672,7 @@ const DiscoverScreen = ({navigation}) => {
                 verticalSwipe={false}
                 disableTopSwipe
                 disableBottomSwipe
+                swipeBackCard
                 useViewOverflow={false}
                 onSwipedLeft={onSwipedLeft}
                 onSwipedRight={onSwipedRight}
@@ -664,7 +781,25 @@ const likeShadow = Platform.select({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.bg,
+    backgroundColor: T.colors.background,
+  },
+  blobCoral: {
+    position: 'absolute',
+    top: -60,
+    right: -40,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
+  },
+  blobBlue: {
+    position: 'absolute',
+    bottom: 120,
+    left: -70,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(94, 194, 215, 0.14)',
   },
   header: {
     flexDirection: 'row',
@@ -688,6 +823,76 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...softShadow,
+  },
+  countBanner: {
+    marginHorizontal: 18,
+    marginTop: 10,
+    marginBottom: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: C.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.18)',
+    ...Platform.select({
+      ios: {
+        shadowColor: C.primary,
+        shadowOffset: {width: 0, height: 6},
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {elevation: 3},
+    }),
+  },
+  countGlow: {
+    position: 'absolute',
+    right: -18,
+    top: -22,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255,107,107,0.12)',
+  },
+  countIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,107,107,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countTextCol: {
+    flex: 1,
+  },
+  countNumber: {
+    fontFamily: Fonts.bold,
+    fontSize: 22,
+    lineHeight: 26,
+    color: C.text,
+    letterSpacing: 0.2,
+  },
+  countCaption: {
+    marginTop: 1,
+    fontFamily: Fonts.medium,
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  countPill: {
+    backgroundColor: C.primary,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  countPillText: {
+    fontFamily: Fonts.bold,
+    fontSize: 10,
+    color: C.surface,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   deckArea: {
     flex: 1,

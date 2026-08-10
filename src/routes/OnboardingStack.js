@@ -5,6 +5,7 @@ import WelcomeScreen from '../screens/onboarding/WelcomeScreen';
 import OnboardingPrefsScreen from '../screens/onboarding/OnboardingPrefsScreen';
 import OnboardingNameScreen from '../screens/onboarding/OnboardingNameScreen';
 import OnboardingPartnerScreen from '../screens/onboarding/OnboardingPartnerScreen';
+import InAppPurchase from '../screens/premium/InAppPurchase';
 
 const Stack = createStackNavigator();
 
@@ -18,6 +19,7 @@ const OnboardingStack = () => {
         name="OnboardingPartner"
         component={OnboardingPartnerScreen}
       />
+      <Stack.Screen name="InAppPurchase" component={InAppPurchase} />
     </Stack.Navigator>
   );
 };

@@ -12,4 +12,6 @@ export {
   reapplyUpdateGateOnForeground,
   recheckIosUpdateRequirement,
   runStartupAppUpdateCheck,
+  startAndroidFlexibleUpdate,
+  installDownloadedAndroidUpdate,
 } from './AppUpdateService';

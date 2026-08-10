@@ -1,20 +1,17 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect, useContext, useRef} from 'react';
 import {
-  View,
   Text,
-  TouchableOpacity,
-  Alert,
+  Pressable,
   ActivityIndicator,
-  TouchableWithoutFeedback,
-  Keyboard,
+  Alert,
 } from 'react-native';
-import {Colors, Fonts} from '../../styles';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
 import {Flash} from '../../util';
 import AppInput from '../../components/AppInput';
-import SafeScreen from '../../components/SafeScreen';
-import {styles} from './signInScreenStyles';
+import AuthScreenLayout from './AuthScreenLayout';
+import AuthSocialFooter from './AuthSocialFooter';
+import {authStyles} from './authStyles';
 
 const SignInScreen = ({navigation}) => {
   const {
@@ -22,6 +19,7 @@ const SignInScreen = ({navigation}) => {
   } = useContext(AppContext);
   const {
     loginUserWithCredentials,
+    signInWithGoogle,
     clearError,
     error: authError,
   } = useContext(AuthContext);
@@ -30,34 +28,15 @@ const SignInScreen = ({navigation}) => {
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [isButtonDisabled, setIsButtonDisabled] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const passwordRef = useRef(null);
+  const googleSubmittingRef = useRef(false);
 
   const isValidEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   const isValidPassword = value => value.length >= 6;
-
-  const handleEmailChange = text => {
-    setEmail(text);
-    if (!isValidEmail(text)) {
-      setEmailError(locale?.error?.emailInvalid || 'Invalid email');
-      setIsButtonDisabled(true);
-    } else {
-      setEmailError('');
-      setIsButtonDisabled(!isValidPassword(password));
-    }
-  };
-
-  const handlePasswordChange = text => {
-    const trimmed = text.trim();
-    setPassword(trimmed);
-    if (!isValidPassword(trimmed)) {
-      setPasswordError(locale?.error?.passcodeInvalid || 'Invalid password');
-      setIsButtonDisabled(true);
-    } else {
-      setPasswordError('');
-      setIsButtonDisabled(!isValidEmail(email));
-    }
-  };
+  const canSubmit =
+    isValidEmail(email) && isValidPassword(password) && !loading && !googleLoading;
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -65,108 +44,171 @@ const SignInScreen = ({navigation}) => {
       setEmailError('');
       setPassword('');
       setPasswordError('');
-      setIsButtonDisabled(true);
       clearError?.();
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, clearError]);
+
+  const handleEmailChange = text => {
+    setEmail(text);
+    setEmailError(isValidEmail(text) ? '' : locale?.error?.emailInvalid || 'Invalid email');
+  };
+
+  const handlePasswordChange = text => {
+    const trimmed = text.trim();
+    setPassword(trimmed);
+    setPasswordError(
+      isValidPassword(trimmed)
+        ? ''
+        : locale?.error?.passcodeInvalid || 'Password must be at least 6 characters',
+    );
+  };
+
+  const finishLogin = session => {
+    if (!session?.userId) {
+      Alert.alert(
+        'Error',
+        'Invalid Email or Password. Please check the information entered.',
+      );
+      return;
+    }
+    if (!session.emailVerified) {
+      navigation.replace('EmailVerification');
+      return;
+    }
+    navigation.getParent()?.navigate('MainTabs');
+  };
 
   const loginHandler = async () => {
     clearError?.();
+    if (!isValidEmail(email)) {
+      setEmailError(locale?.error?.emailInvalid || 'Invalid email');
+      return;
+    }
+    if (!isValidPassword(password)) {
+      setPasswordError('Password must be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
     try {
       const session = await loginUserWithCredentials(email, password);
       setLoading(false);
-      if (!session?.userId) {
-        Alert.alert(
-          'Error',
-          'Invalid Email or Password. Please check the information entered.',
-        );
-        return;
-      }
-      if (!session.emailVerified) {
-        navigation.replace('EmailVerification');
-        return;
-      }
-      navigation.getParent()?.navigate('MainTabs');
+      finishLogin(session);
     } catch (e) {
       setLoading(false);
       Flash.showError(typeof e === 'string' ? e : e?.message || 'Login failed');
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (googleSubmittingRef.current || loading || googleLoading) {
+      return;
+    }
+    clearError?.();
+    googleSubmittingRef.current = true;
+    setGoogleLoading(true);
+    try {
+      const session = await signInWithGoogle();
+      // Google emails are typically verified
+      if (session?.userId) {
+        navigation.getParent()?.navigate('MainTabs');
+      }
+    } catch (e) {
+      const message =
+        typeof e === 'string' ? e : e?.message || 'Google sign-in failed';
+      const lower = String(message).toLowerCase();
+      if (lower.includes('cancel') || lower.includes('cancelled')) {
+        return;
+      }
+      Flash.showError(message);
+    } finally {
+      googleSubmittingRef.current = false;
+      setGoogleLoading(false);
+    }
+  };
+
+  const busy = loading || googleLoading;
+
   return (
-    <SafeScreen backgroundColor={Colors.primary}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
-          <Text
-            style={{
-              fontFamily: Fonts.bold,
-              fontSize: 22,
-              color: Colors.WHITE,
-              alignSelf: 'flex-start',
-              marginTop: 12,
-              marginBottom: 8,
-            }}>
+    <AuthScreenLayout
+      compact
+      showBack
+      onBack={() => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return;
+        }
+        navigation.getParent()?.goBack();
+      }}
+      heroTitle={locale?.bT_login || 'Welcome back'}
+      heroSubtitle="Sign in to sync favorites.">
+      <AppInput
+        label={locale?.placeholder?.email || 'Email'}
+        leftIcon="mail"
+        value={email}
+        onChangeText={handleEmailChange}
+        placeholder={locale?.placeholder?.email || 'Email'}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => passwordRef.current?.focus?.()}
+        error={emailError}
+        containerStyle={authStyles.inputCompact}
+        inputWrapperStyle={{minHeight: 46}}
+      />
+
+      <AppInput
+        ref={passwordRef}
+        label={locale?.placeholder?.password || 'Password'}
+        leftIcon="key"
+        leftIconSet="fa"
+        value={password}
+        onChangeText={handlePasswordChange}
+        placeholder={locale?.placeholder?.password || 'Password'}
+        secureTextEntry
+        returnKeyType="done"
+        onSubmitEditing={loginHandler}
+        error={passwordError || authError}
+        containerStyle={authStyles.inputCompact}
+        inputWrapperStyle={{minHeight: 46}}
+      />
+
+      <Pressable
+        style={authStyles.forgotLinkRow}
+        onPress={() => navigation.navigate('ForgotPassword')}
+        hitSlop={8}>
+        <Text style={authStyles.forgotLink}>
+          {locale?.forgotPassword || 'Forgot password?'}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        style={[
+          authStyles.primaryButton,
+          !canSubmit ? authStyles.primaryButtonDisabled : null,
+        ]}
+        onPress={loginHandler}
+        disabled={!canSubmit}>
+        {loading ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={authStyles.primaryButtonText}>
             {locale?.bT_login || 'Sign in'}
           </Text>
+        )}
+      </Pressable>
 
-          <AppInput
-            label={locale?.placeholder?.email || 'Email'}
-            leftIcon="mail"
-            value={email}
-            onChangeText={handleEmailChange}
-            placeholder={locale?.placeholder?.email || 'Email'}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={emailError}
-          />
-
-          <AppInput
-            label={locale?.placeholder?.password || 'Password'}
-            leftIcon="key"
-            leftIconSet="fa"
-            value={password}
-            onChangeText={handlePasswordChange}
-            placeholder={locale?.placeholder?.password || 'Password'}
-            secureTextEntry
-            error={passwordError || authError}
-          />
-
-          <TouchableOpacity
-            style={{paddingBottom: 16, alignSelf: 'flex-end'}}
-            onPress={() => navigation.navigate('ForgotPassword')}>
-            <Text style={[styles.forgotText, {fontFamily: Fonts.semibold}]}>
-              {locale?.forgotPassword || 'Forgot password?'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.button,
-              isButtonDisabled || loading ? styles.disabledButton : null,
-            ]}
-            onPress={loginHandler}
-            disabled={isButtonDisabled || loading}>
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={[styles.buttonText, {fontFamily: Fonts.semibold}]}>
-                {locale?.bT_login || 'Sign in'}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{padding: 20}}
-            onPress={() => navigation.navigate('SignUp')}>
-            <Text style={[styles.buttonText, {fontFamily: Fonts.medium}]}>
-              {locale?.dontHaveAnAccount || "Don't have an account? Sign up"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableWithoutFeedback>
-    </SafeScreen>
+      <AuthSocialFooter
+        message={locale?.dontHaveAnAccount?.split('?')?.[0] || "Don't have an account?"}
+        actionLabel="Sign up"
+        onPress={() => navigation.navigate('SignUp')}
+        onGooglePress={handleGoogleSignIn}
+        googleDisabled={busy}
+      />
+    </AuthScreenLayout>
   );
 };
 

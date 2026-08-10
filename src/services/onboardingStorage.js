@@ -27,6 +27,19 @@ export async function setDisplayName(name) {
   await AsyncStorage.setItem(KEYS.displayName, name || '');
 }
 
+/** Mark Welcome / onboarding complete so cold start skips Welcome. */
+export async function markAppEntered() {
+  await setOnboardingDone(true);
+  try {
+    const {Storage} = require('../util');
+    if (Storage?.setAppSetUpComplete) {
+      await Storage.setAppSetUpComplete('true');
+    }
+  } catch (e) {
+    await AsyncStorage.setItem('app_setup_complete', 'true');
+  }
+}
+
 export async function getGenderPrefs() {
   const raw = await AsyncStorage.getItem(KEYS.genderPrefs);
   if (!raw) {
@@ -96,6 +109,10 @@ export async function getPartnerCode() {
   return (await AsyncStorage.getItem(KEYS.partnerCode)) || '';
 }
 
+export async function setPartnerCode(code) {
+  await AsyncStorage.setItem(KEYS.partnerCode, String(code || ''));
+}
+
 export async function setPartnerLinked(linked) {
   await AsyncStorage.setItem(KEYS.partnerLinked, linked ? 'true' : 'false');
 }
@@ -116,6 +133,7 @@ export const OnboardingStorage = {
   KEYS,
   getOnboardingDone,
   setOnboardingDone,
+  markAppEntered,
   getDisplayName,
   setDisplayName,
   getGenderPrefs,
@@ -127,6 +145,7 @@ export const OnboardingStorage = {
   setInviteSent,
   getInviteSent,
   getPartnerCode,
+  setPartnerCode,
   setPartnerLinked,
   isPartnerLinked,
   generatePartnerCode,

@@ -21,6 +21,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
 import {AppContext} from '../../context/AppContext';
+import {AuthContext} from '../../context/AuthContext';
 import {
   getDisplayName,
   setDisplayName,
@@ -28,14 +29,24 @@ import {
   setGenderPrefs,
   getStylePrefs,
   setStylePrefs,
-  getOrCreatePartnerCode,
-  regeneratePartnerCode,
   getInviteSent,
-  setInviteSent,
   getPartnerCode,
   isPartnerLinked,
-  setPartnerLinked,
 } from '../../services/onboardingStorage';
+import {
+  createPartnerSession,
+  joinPartnerSession,
+  leavePartnerSession,
+  refreshPartnerConnection,
+} from '../../services/partner.service';
+import {logoutFirebase} from '../../services/auth.service';
+import {resolveDisplayName} from '../../utils/profileDisplay';
+import {getInstalledAppVersion} from '../../services/appUpdate';
+import {APP_DISPLAY_NAME, APP_VERSION} from '../../constants/appInfo';
+import {
+  NAME_STYLE_OPTIONS,
+  isStyleLocked,
+} from '../../constants/nameStyleOptions';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 const H_PAD = 14;
@@ -59,13 +70,7 @@ const C = {
   surface: '#FFFFFF',
 };
 
-const STYLE_OPTIONS = [
-  {id: 'classic', label: 'Classic', color: C.mint},
-  {id: 'modern', label: 'Modern'},
-  {id: 'vintage', label: 'Vintage Revival'},
-  {id: 'short', label: 'Short & Sweet'},
-  {id: 'neutral', label: 'Gender-Neutral'},
-];
+const STYLE_OPTIONS = NAME_STYLE_OPTIONS;
 
 const ACCOUNT_ROWS = [
   {key: 'notifications', label: 'Notifications', icon: 'notifications', color: '#4C9AFF'},
@@ -105,7 +110,7 @@ const PillButton = ({title, icon, onPress}) => (
   </TouchableOpacity>
 );
 
-const StyleChip = ({label, selected, selectedColor, onPress}) => (
+const StyleChip = ({label, selected, selectedColor, locked, onPress}) => (
   <TouchableOpacity
     activeOpacity={0.85}
     onPress={onPress}
@@ -115,10 +120,19 @@ const StyleChip = ({label, selected, selectedColor, onPress}) => (
         backgroundColor: selectedColor || C.mint,
         borderColor: selectedColor || C.mint,
       },
+      locked && styles.chipLocked,
     ]}>
-    <Text style={[styles.chipText, selected && styles.chipTextOn]}>
+    <Text
+      style={[
+        styles.chipText,
+        selected && styles.chipTextOn,
+        locked && styles.chipLockedText,
+      ]}>
       {label}
     </Text>
+    {locked ? (
+      <Ionicons name="lock-closed" size={12} color={C.textHint} />
+    ) : null}
   </TouchableOpacity>
 );
 
@@ -126,7 +140,14 @@ const PreferencesScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
   const {discoverCardStyle, updateDiscoverCardStyle, isPrime} =
     useContext(AppContext);
-  const [displayName, setDisplayNameState] = useState('');
+  const {
+    isUserLoggedin,
+    email,
+    displayName: authDisplayName,
+    logoutUser,
+    updateDisplayName,
+  } = useContext(AuthContext);
+  const [localName, setLocalName] = useState('');
   const [nameModal, setNameModal] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [inviteSent, setInviteSentState] = useState(false);
@@ -137,30 +158,63 @@ const PreferencesScreen = ({navigation}) => {
   const [stylesSelected, setStylesSelected] = useState(['classic']);
   const [codeModal, setCodeModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
 
   const cardStyle = discoverCardStyle || 'detailed';
+  const displayName = resolveDisplayName({
+    localName,
+    authDisplayName,
+    isUserLoggedin,
+  });
 
   const loadPrefs = useCallback(async () => {
-    const [name, linked, invited, code, g, s] = await Promise.all([
+    const [name, g, s, connection] = await Promise.all([
       getDisplayName(),
-      isPartnerLinked(),
-      getInviteSent(),
-      getPartnerCode(),
       getGenderPrefs(),
       getStylePrefs(),
+      refreshPartnerConnection().catch(() => null),
     ]);
-    setDisplayNameState(name || '');
-    setPartnerLinkedState(linked);
-    setInviteSentState(invited);
-    setPartnerCode(code);
+    setLocalName(name || '');
     setBoy(!!g.boy);
     setGirl(!!g.girl);
     setStylesSelected(Array.isArray(s) && s.length ? s : ['classic']);
+
+    if (connection) {
+      setPartnerLinkedState(!!connection.linked);
+      setInviteSentState(!!(connection.waiting || connection.linked));
+      setPartnerCode(connection.joinCode || '');
+    } else {
+      const [linked, invited, code] = await Promise.all([
+        isPartnerLinked(),
+        getInviteSent(),
+        getPartnerCode(),
+      ]);
+      setPartnerLinkedState(linked);
+      setInviteSentState(invited);
+      setPartnerCode(code);
+    }
   }, []);
 
   useEffect(() => {
     loadPrefs();
-  }, [loadPrefs]);
+  }, [loadPrefs, isUserLoggedin, authDisplayName, email]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const version = await getInstalledAppVersion();
+        if (mounted && version) {
+          setAppVersion(version);
+        }
+      } catch (e) {
+        // keep APP_VERSION fallback
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const persistGender = useCallback(async (nextBoy, nextGirl) => {
     setBoy(nextBoy);
@@ -168,15 +222,25 @@ const PreferencesScreen = ({navigation}) => {
     await setGenderPrefs({boy: nextBoy, girl: nextGirl});
   }, []);
 
-  const toggleStyle = useCallback(async id => {
-    setStylesSelected(prev => {
-      const next = prev.includes(id)
-        ? prev.filter(x => x !== id)
-        : [...prev, id];
-      void setStylePrefs(next);
-      return next;
-    });
-  }, []);
+  const toggleStyle = useCallback(
+    async id => {
+      const opt = STYLE_OPTIONS.find(o => o.id === id);
+      if (isStyleLocked(opt, isPrime)) {
+        navigation.navigate('InAppPurchase');
+        return;
+      }
+      setStylesSelected(prev => {
+        const next = prev.includes(id)
+          ? prev.filter(x => x !== id)
+          : [...prev, id];
+        // Never persist only-empty; keep at least one free style if all cleared
+        const safe = next.length ? next : ['classic'];
+        void setStylePrefs(safe);
+        return safe;
+      });
+    },
+    [isPrime, navigation],
+  );
 
   const selectCardStyle = useCallback(
     async style => {
@@ -187,26 +251,39 @@ const PreferencesScreen = ({navigation}) => {
 
   const invitePartner = useCallback(async () => {
     try {
-      const code = await getOrCreatePartnerCode();
+      const session = await createPartnerSession();
+      const code = session.joinCode || '';
       setPartnerCode(code);
-      await setInviteSent(true);
       setInviteSentState(true);
-      await Share.open({
-        title: 'Invite your partner',
-        message: `Join me on Baby Names Together! Use code ${code} to start matching names together.`,
-      });
+      setPartnerLinkedState(!!session.partnerUid);
+      try {
+        await Share.open({
+          title: 'Invite your partner',
+          message: `Join me on Baby Names and choose our baby's name together.\n\nPartner Code: ${code}`,
+        });
+      } catch (shareErr) {
+        // cancelled
+      }
     } catch (e) {
-      // cancelled
+      Alert.alert(
+        'Could not create invite',
+        e?.message || 'Check your connection and try again.',
+      );
     }
   }, []);
 
   const shareLink = useCallback(async () => {
     try {
-      const code = partnerCode || (await getOrCreatePartnerCode());
-      setPartnerCode(code);
+      let code = partnerCode;
+      if (!code) {
+        const session = await createPartnerSession();
+        code = session.joinCode || '';
+        setPartnerCode(code);
+        setInviteSentState(true);
+      }
       await Share.open({
         title: 'Share invite link',
-        message: `Join me on Baby Names Together with code ${code}`,
+        message: `Join me on Baby Names and choose our baby's name together.\n\nPartner Code: ${code}`,
       });
     } catch (e) {
       // cancelled
@@ -214,47 +291,107 @@ const PreferencesScreen = ({navigation}) => {
   }, [partnerCode]);
 
   const copyCode = useCallback(async () => {
-    const code = partnerCode || (await getOrCreatePartnerCode());
-    setPartnerCode(code);
-    Toast.show({type: 'success', text1: 'Code copied', text2: code});
     try {
-      await Share.open({title: 'Partner code', message: code});
+      let code = partnerCode;
+      if (!code) {
+        const session = await createPartnerSession();
+        code = session.joinCode || '';
+        setPartnerCode(code);
+        setInviteSentState(true);
+      }
+      Toast.show({type: 'success', text1: 'Code ready', text2: code});
+      try {
+        await Share.open({title: 'Partner code', message: code});
+      } catch (shareErr) {
+        // cancelled after toast
+      }
     } catch (e) {
-      // cancelled after toast
+      Alert.alert('Could not get code', e?.message || 'Try again.');
     }
   }, [partnerCode]);
 
   const generateNewLink = useCallback(async () => {
-    const code = await regeneratePartnerCode();
-    setPartnerCode(code);
-    setInviteSentState(true);
-    Toast.show({type: 'success', text1: 'New invite code ready'});
+    try {
+      await leavePartnerSession().catch(() => {});
+      const session = await createPartnerSession();
+      setPartnerCode(session.joinCode);
+      setInviteSentState(true);
+      setPartnerLinkedState(false);
+      Toast.show({type: 'success', text1: 'New partner code ready'});
+    } catch (e) {
+      Alert.alert('Could not refresh code', e?.message || 'Try again.');
+    }
   }, []);
 
   const joinWithCode = useCallback(async () => {
-    if (joinCode.trim().length < 4) {
-      Alert.alert('Enter a valid invite code');
+    const code = joinCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      Alert.alert('Enter a valid 6-digit invite code');
       return;
     }
-    await setPartnerLinked(true);
-    await setInviteSent(true);
-    setPartnerLinkedState(true);
-    setInviteSentState(true);
-    const code = await getOrCreatePartnerCode();
-    setPartnerCode(code);
-    setCodeModal(false);
-    Toast.show({type: 'success', text1: 'Partner connected'});
+    try {
+      await joinPartnerSession(code);
+      setPartnerLinkedState(true);
+      setInviteSentState(true);
+      setPartnerCode(code);
+      setCodeModal(false);
+      setJoinCode('');
+      Toast.show({type: 'success', text1: 'Partner connected'});
+    } catch (e) {
+      Alert.alert('Could not join', e?.message || 'Try again.');
+    }
   }, [joinCode]);
 
   const saveName = useCallback(async () => {
     const next = nameDraft.trim();
-    await setDisplayName(next);
-    setDisplayNameState(next);
-    setNameModal(false);
-  }, [nameDraft]);
+    try {
+      if (updateDisplayName) {
+        await updateDisplayName(next);
+      } else {
+        await setDisplayName(next);
+      }
+      setLocalName(next);
+      setNameModal(false);
+      Toast.show({type: 'success', text1: 'Name updated'});
+    } catch (e) {
+      Alert.alert('Could not update name', e?.message || 'Try again.');
+    }
+  }, [nameDraft, updateDisplayName]);
 
   const onAccountPress = useCallback(
     key => {
+      if (key === 'login') {
+        navigation.getParent()?.navigate('Auth') ?? navigation.navigate('Auth');
+        return;
+      }
+      if (key === 'logout') {
+        Alert.alert(
+          'Log out',
+          'You will return to guest mode. Cloud favorites stay on your account.',
+          [
+            {text: 'Cancel', style: 'cancel'},
+            {
+              text: 'Log out',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  if (logoutUser) {
+                    await logoutUser();
+                  } else {
+                    await logoutFirebase();
+                  }
+                  setLocalName('');
+                  setNameDraft('');
+                  Toast.show({type: 'success', text1: 'Logged out'});
+                } catch (e) {
+                  Alert.alert('Logout failed', e?.message || 'Try again.');
+                }
+              },
+            },
+          ],
+        );
+        return;
+      }
       if (key === 'privacy') {
         navigation.navigate('PrivacyPolicy');
         return;
@@ -278,7 +415,7 @@ const PreferencesScreen = ({navigation}) => {
         'Notification settings will open when enabled on your device.',
       );
     },
-    [navigation],
+    [navigation, logoutUser],
   );
 
   const initial = (displayName || 'Y').charAt(0).toUpperCase();
@@ -339,13 +476,16 @@ const PreferencesScreen = ({navigation}) => {
               ) : null}
             </View>
             <View style={styles.profileNameRow}>
-              <Text style={styles.profileName}>{displayName || 'You'}</Text>
+              <Text style={styles.profileName}>{displayName}</Text>
               {isPrime ? (
                 <View style={styles.inlinePro}>
                   <Text style={styles.inlineProText}>PRO</Text>
                 </View>
               ) : null}
             </View>
+            {isUserLoggedin && email ? (
+              <Text style={styles.profileEmail}>{email}</Text>
+            ) : null}
             <Text style={styles.profileMeta}>Swiping since August 2026</Text>
           </View>
         </View>
@@ -481,15 +621,19 @@ const PreferencesScreen = ({navigation}) => {
           </View>
           <Text style={styles.fieldLabel}>Name styles</Text>
           <View style={styles.chips}>
-            {STYLE_OPTIONS.map(opt => (
-              <StyleChip
-                key={opt.id}
-                label={opt.label}
-                selected={stylesSelected.includes(opt.id)}
-                selectedColor={opt.color || C.mint}
-                onPress={() => toggleStyle(opt.id)}
-              />
-            ))}
+            {STYLE_OPTIONS.map(opt => {
+              const locked = isStyleLocked(opt, isPrime);
+              return (
+                <StyleChip
+                  key={opt.id}
+                  label={opt.label}
+                  locked={locked}
+                  selected={!locked && stylesSelected.includes(opt.id)}
+                  selectedColor={opt.color || C.mint}
+                  onPress={() => toggleStyle(opt.id)}
+                />
+              );
+            })}
           </View>
         </View>
 
@@ -593,6 +737,37 @@ const PreferencesScreen = ({navigation}) => {
             <Ionicons name="settings-sharp" size={14} color={C.primary} />
             <Text style={styles.cardHeaderTitle}>Account</Text>
           </View>
+          {isUserLoggedin ? (
+            <View
+              style={[
+                styles.accountRow,
+                styles.accountRowStatic,
+                ACCOUNT_ROWS.length === 0 && styles.accountRowLast,
+              ]}>
+              <View style={styles.accountLeft}>
+                <Ionicons name="person" size={17} color="#4C9AFF" />
+                <View>
+                  <Text style={styles.accountLabel}>
+                    {displayName || 'Account'}
+                  </Text>
+                  {email ? (
+                    <Text style={styles.accountEmail}>{email}</Text>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.accountRow}
+              onPress={() => onAccountPress('login')}
+              activeOpacity={0.7}>
+              <View style={styles.accountLeft}>
+                <Ionicons name="person-circle" size={17} color="#4C9AFF" />
+                <Text style={styles.accountLabel}>Login / Sign Up</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#C8D0DA" />
+            </TouchableOpacity>
+          )}
           {ACCOUNT_ROWS.map((row, index) => (
             <TouchableOpacity
               key={row.key}
@@ -610,6 +785,25 @@ const PreferencesScreen = ({navigation}) => {
             </TouchableOpacity>
           ))}
         </View>
+
+        {isUserLoggedin ? (
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={() => onAccountPress('logout')}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Log out">
+            <Ionicons name="log-out-outline" size={18} color={C.primary} />
+            <Text style={styles.logoutBtnText}>Log out</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <Text
+          style={styles.versionLabel}
+          accessibilityRole="text"
+          accessibilityLabel={`${APP_DISPLAY_NAME} version ${appVersion}`}>
+          {APP_DISPLAY_NAME} · v{appVersion}
+        </Text>
       </ScrollView>
 
       <Modal visible={codeModal} transparent animationType="fade">
@@ -619,8 +813,9 @@ const PreferencesScreen = ({navigation}) => {
             <TextInput
               value={joinCode}
               onChangeText={setJoinCode}
-              autoCapitalize="characters"
-              placeholder="XM5XV8"
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="482913"
               placeholderTextColor={C.textHint}
               style={styles.modalInput}
             />
@@ -793,6 +988,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     color: C.text,
+  },
+  profileEmail: {
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: C.textMuted,
+    marginTop: 2,
   },
   inlinePro: {
     backgroundColor: C.primary,
@@ -985,6 +1187,9 @@ const styles = StyleSheet.create({
     marginHorizontal: -3,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 16,
@@ -994,6 +1199,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 3,
     marginBottom: 8,
   },
+  chipLocked: {
+    backgroundColor: '#F5F7FA',
+    borderColor: '#E8EDF3',
+  },
   chipText: {
     fontFamily: Fonts.semibold,
     fontSize: 12,
@@ -1001,6 +1210,9 @@ const styles = StyleSheet.create({
   },
   chipTextOn: {
     color: '#FFFFFF',
+  },
+  chipLockedText: {
+    color: C.textHint,
   },
   styleScroll: {
     paddingRight: 8,
@@ -1175,6 +1387,43 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.semibold,
     fontSize: 13,
     color: C.text,
+  },
+  accountEmail: {
+    marginTop: 2,
+    fontFamily: Fonts.regular,
+    fontSize: 11,
+    color: C.textMuted,
+  },
+  accountRowStatic: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
+  },
+  logoutBtn: {
+    marginTop: 4,
+    marginBottom: 8,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: C.surface,
+    borderWidth: 1.5,
+    borderColor: '#FFD0D0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...cardShadow,
+  },
+  logoutBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: 15,
+    color: C.primary,
+  },
+  versionLabel: {
+    marginTop: 18,
+    marginBottom: 8,
+    textAlign: 'center',
+    fontFamily: Fonts.medium,
+    fontSize: 12,
+    color: C.textHint,
   },
   modalBackdrop: {
     flex: 1,

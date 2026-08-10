@@ -15,6 +15,8 @@ import {
   signOut,
   getEmailAuthCredential,
   linkWithCredential,
+  signInWithCredential,
+  getFirebaseAuth,
 } from '../firebase/auth';
 import {
   getEmailVerificationActionCodeSettings,
@@ -26,7 +28,17 @@ import {
   createUserProfileOnce,
   syncEmailVerifiedStatus,
 } from './user.service';
+import {
+  getGoogleAuthCredential,
+  credentialFromIdToken,
+  signOutFromGoogle,
+} from './googleSignIn.service';
 import {mapAuthError} from '../utils/authErrors';
+import {
+  getDisplayName as getLocalDisplayName,
+  setDisplayName as setLocalDisplayName,
+  markAppEntered,
+} from './onboardingStorage';
 
 const toSessionPayload = async user => {
   if (!user) {
@@ -42,6 +54,53 @@ const toSessionPayload = async user => {
     isAnonymous: !!user.isAnonymous,
     isUserLoggedin: !user.isAnonymous,
   };
+};
+
+/** Keep Preferences / Discover name in sync with Firebase account. */
+const syncLocalProfileFromUser = async user => {
+  if (!user || user.isAnonymous) {
+    return;
+  }
+  const authName = String(user.displayName || '').trim();
+  if (authName) {
+    await setLocalDisplayName(authName);
+    return;
+  }
+  const local = String((await getLocalDisplayName()) || '').trim();
+  if (!local && user.email) {
+    await setLocalDisplayName(user.email.split('@')[0] || '');
+  }
+};
+
+/** Call after successful login / signup / guest entry into MainTabs. */
+export const completeAuthenticatedEntry = async user => {
+  await markAppEntered();
+  if (user) {
+    await syncLocalProfileFromUser(user);
+  }
+  if (user && !user.isAnonymous) {
+    try {
+      const {ensureCloudFavoritesForUser} = require('./favorites.service');
+      await ensureCloudFavoritesForUser(user.uid);
+    } catch (e) {
+      console.warn('Favorites ensure on login skipped:', e?.message || e);
+    }
+  }
+};
+
+export const updateUserDisplayName = async name => {
+  const next = String(name || '').trim();
+  await setLocalDisplayName(next);
+  const user = getCurrentUser();
+  if (user && !user.isAnonymous) {
+    try {
+      await updateProfile(user, {displayName: next});
+      await reloadUser(user);
+    } catch (e) {
+      console.warn('updateUserDisplayName Firebase skipped:', e?.message || e);
+    }
+  }
+  return toSessionPayload(getCurrentUser() || user);
 };
 
 export {toSessionPayload};
@@ -89,6 +148,37 @@ export const ensureFirebaseSession = async () => {
 
 export const loginWithEmailPassword = async ({email, password}) => {
   try {
+    const previous = getCurrentUser();
+    const previousUid = previous?.isAnonymous ? previous.uid : null;
+
+    // Prefer linking anonymous → email to keep the same UID when possible
+    if (previous?.isAnonymous) {
+      try {
+        const emailCred = getEmailAuthCredential(
+          email.trim().toLowerCase(),
+          password,
+        );
+        const linked = await linkWithCredential(previous, emailCred);
+        let user = linked.user;
+        await reloadUser(user);
+        user = getCurrentUser() || user;
+        await softProfile(user);
+        await syncEmailVerifiedStatus(user.uid, user.emailVerified);
+        await softCatalog();
+        try {
+          const {migrateLocalFavoritesToAccount} = require('./favorites.service');
+          await migrateLocalFavoritesToAccount(user.uid);
+        } catch (e) {
+          console.warn('Local favorites migrate skipped:', e?.message || e);
+        }
+        await completeAuthenticatedEntry(user);
+        return toSessionPayload(user);
+      } catch (linkError) {
+        // Fall through to normal sign-in (e.g. email already registered)
+        console.log('Link on login skipped:', linkError?.code || linkError);
+      }
+    }
+
     const credential = await signInWithEmailAndPassword(
       email.trim().toLowerCase(),
       password,
@@ -100,6 +190,15 @@ export const loginWithEmailPassword = async ({email, password}) => {
     await softProfile(user);
     await syncEmailVerifiedStatus(user.uid, user.emailVerified);
     await softCatalog();
+
+    try {
+      const {migrateGuestDataToAccount} = require('./favorites.service');
+      await migrateGuestDataToAccount(previousUid, user.uid);
+    } catch (e) {
+      console.warn('Guest data migrate skipped:', e?.message || e);
+    }
+
+    await completeAuthenticatedEntry(user);
     return toSessionPayload(user);
   } catch (error) {
     throw mapAuthError(error);
@@ -180,6 +279,14 @@ export const signupWithEmailPassword = async ({
 
     await softCatalog();
 
+    try {
+      const {migrateLocalFavoritesToAccount} = require('./favorites.service');
+      await migrateLocalFavoritesToAccount(user.uid);
+    } catch (e) {
+      console.warn('Local favorites migrate skipped:', e?.message || e);
+    }
+
+    await completeAuthenticatedEntry(user);
     return {
       ...(await toSessionPayload(user)),
       userId: user.uid,
@@ -194,6 +301,73 @@ export const signupWithEmailPassword = async ({
       message: mapAuthError(error),
       needsEmailVerification: false,
     };
+  }
+};
+
+/**
+ * Google Sign-In — CareerMate-style, with guest (anonymous) link + favorites migrate.
+ */
+export const loginWithGoogle = async () => {
+  try {
+    const previous = getCurrentUser();
+    const previousUid = previous?.isAnonymous ? previous.uid : null;
+    const {idToken, credential: googleCred} = await getGoogleAuthCredential();
+
+    let user;
+
+    if (previous?.isAnonymous) {
+      try {
+        const linked = await linkWithCredential(previous, googleCred);
+        user = linked.user;
+      } catch (linkError) {
+        console.log('Google link on login skipped:', linkError?.code || linkError);
+        // Fresh credential object from the same idToken (one-time AuthCredential objects)
+        const signed = await signInWithCredential(
+          getFirebaseAuth(),
+          credentialFromIdToken(idToken),
+        );
+        user = signed.user;
+      }
+    } else {
+      const signed = await signInWithCredential(
+        getFirebaseAuth(),
+        credentialFromIdToken(idToken),
+      );
+      user = signed.user;
+    }
+
+    await reloadUser(user);
+    user = getCurrentUser() || user;
+
+    await createUserProfileOnce({
+      uid: user.uid,
+      email: user.email || '',
+      fullName: user.displayName || '',
+      username: user.displayName || (user.email || '').split('@')[0] || 'user',
+      isAnonymous: false,
+      emailVerified: !!user.emailVerified,
+    }).catch(e => console.warn('Google profile create skipped:', e?.message || e));
+
+    await softProfile(user, {authProvider: 'google'});
+    await syncEmailVerifiedStatus(user.uid, user.emailVerified);
+    await softCatalog();
+
+    try {
+      if (previousUid && previousUid !== user.uid) {
+        const {migrateGuestDataToAccount} = require('./favorites.service');
+        await migrateGuestDataToAccount(previousUid, user.uid);
+      } else {
+        const {migrateLocalFavoritesToAccount} = require('./favorites.service');
+        await migrateLocalFavoritesToAccount(user.uid);
+      }
+    } catch (e) {
+      console.warn('Google favorites migrate skipped:', e?.message || e);
+    }
+
+    await completeAuthenticatedEntry(user);
+    return toSessionPayload(user);
+  } catch (error) {
+    throw mapAuthError(error);
   }
 };
 
@@ -252,14 +426,25 @@ export const refreshAuthUser = async () => {
   return toSessionPayload(refreshed);
 };
 
-/** Logout email user, then restore anonymous guest session. */
+/** Logout email/Google user, then restore anonymous guest session. */
 export const logoutFirebase = async () => {
+  try {
+    await signOutFromGoogle();
+  } catch (e) {
+    console.log('Google signOut error', e);
+  }
   try {
     if (getCurrentUser()) {
       await signOut();
     }
   } catch (e) {
     console.log('signOut error', e);
+  }
+  // Clear bound account name so UI shows Guest after logout
+  try {
+    await setLocalDisplayName('');
+  } catch (e) {
+    console.warn('Clear display name on logout skipped:', e?.message || e);
   }
   return ensureFirebaseSession();
 };

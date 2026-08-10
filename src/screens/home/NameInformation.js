@@ -18,6 +18,39 @@ import {speakNamePronunciation} from '../../services/speakPronunciation';
 import {shareBabyName} from '../../services/shareBabyName';
 import {getTabBarStyle} from '../../routes/tabBarStyles';
 
+const asText = value => {
+  if (value == null) {
+    return '';
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  if (typeof value === 'object') {
+    return value.name || value.text || value.title || value.description || '';
+  }
+  return '';
+};
+
+const asList = value => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map(item => {
+      if (typeof item === 'string') {
+        return {title: item, subtitle: ''};
+      }
+      if (item && typeof item === 'object') {
+        return {
+          title: item.name || item.title || item.label || '',
+          subtitle: item.role || item.description || item.subtitle || '',
+        };
+      }
+      return null;
+    })
+    .filter(item => item?.title);
+};
+
 const Section = ({title, subtitle, children, defaultOpen = true}) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -25,7 +58,9 @@ const Section = ({title, subtitle, children, defaultOpen = true}) => {
       <TouchableOpacity
         style={styles.cardHeader}
         onPress={() => setOpen(v => !v)}
-        activeOpacity={0.8}>
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityState={{expanded: open}}>
         <View style={styles.flex}>
           <Text style={styles.cardTitle}>{title}</Text>
           {subtitle ? <Text style={styles.cardSub}>{subtitle}</Text> : null}
@@ -44,13 +79,42 @@ const Section = ({title, subtitle, children, defaultOpen = true}) => {
 const NameInformation = ({navigation, route}) => {
   const insets = useSafeAreaInsets();
   const {userId} = useContext(AuthContext);
-  const nameInfo = route?.params?.item || {};
+  const raw = route?.params?.item || {};
+
+  const nameInfo = useMemo(() => {
+    const origin = asText(raw.origin);
+    const meaning =
+      asText(raw.meaning) ||
+      (typeof raw.origin === 'object' ? asText(raw.origin?.description) : '');
+    const syllables =
+      asText(raw.syllables) ||
+      asText(raw.pronunciation) ||
+      asText(raw.name);
+    return {
+      id: raw.id,
+      name: asText(raw.name) || 'Name',
+      gender: asText(raw.gender) || '—',
+      origin,
+      meaning,
+      syllables,
+      syllableCount: raw.syllableCount || 1,
+      funFacts: Array.isArray(raw.funFacts)
+        ? raw.funFacts.map(asText).filter(Boolean)
+        : [],
+      famousPeople: asList(raw.famousPeople),
+      variations: Array.isArray(raw.variations)
+        ? raw.variations.map(asText).filter(Boolean)
+        : [],
+      tags: Array.isArray(raw.tags) ? raw.tags.map(asText).filter(Boolean) : [],
+      status: asText(raw.status),
+    };
+  }, [raw]);
+
   const initial = useMemo(
     () => (nameInfo.name || '?').charAt(0).toUpperCase(),
     [nameInfo.name],
   );
 
-  // Hide bottom tabs while name details is open
   useFocusEffect(
     useCallback(() => {
       const parent = navigation.getParent();
@@ -84,11 +148,8 @@ const NameInformation = ({navigation, route}) => {
   }, [navigation, userId, nameInfo.id]);
 
   const onHearPronunciation = useCallback(() => {
-    void speakNamePronunciation(
-      nameInfo.name,
-      nameInfo.syllables || nameInfo.pronunciation,
-    );
-  }, [nameInfo.name, nameInfo.syllables, nameInfo.pronunciation]);
+    void speakNamePronunciation(nameInfo.name, nameInfo.syllables);
+  }, [nameInfo.name, nameInfo.syllables]);
 
   const onShare = useCallback(() => {
     void shareBabyName(nameInfo.name);
@@ -106,7 +167,9 @@ const NameInformation = ({navigation, route}) => {
           accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={20} color={T.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{nameInfo.name || 'Name'}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {nameInfo.name}
+        </Text>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={onShare}
@@ -120,18 +183,23 @@ const NameInformation = ({navigation, route}) => {
         </TouchableOpacity>
       </View>
 
+      {nameInfo.syllables ? (
+        <Text style={styles.pronunciationLine}>{nameInfo.syllables}</Text>
+      ) : null}
+
       <TouchableOpacity
         style={styles.hearBtn}
         activeOpacity={0.85}
         onPress={onHearPronunciation}>
-        <Ionicons name="bar-chart" size={13} color={T.colors.primary} />
+        <Ionicons name="volume-medium" size={14} color={T.colors.primary} />
         <Text style={styles.hearText}>Tap to hear pronunciation</Text>
       </TouchableOpacity>
 
       <ScrollView
         style={styles.scrollFlex}
         contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         <Section title="Origin & Meaning">
           {nameInfo.origin ? (
             <View style={styles.badge}>
@@ -143,24 +211,77 @@ const NameInformation = ({navigation, route}) => {
           </Text>
         </Section>
 
-        <Section title="Fun Fact" subtitle="Highlights about this name">
+        <Section title="Highlights" subtitle="Quick facts about this name">
+          <View style={styles.fact}>
+            <Text style={styles.factText}>Gender: {nameInfo.gender}</Text>
+          </View>
           <View style={styles.fact}>
             <Text style={styles.factText}>
-              Gender: {nameInfo.gender || '—'}
+              Pronunciation: {nameInfo.syllables || '—'}
             </Text>
           </View>
           <View style={styles.fact}>
             <Text style={styles.factText}>
-              Syllables: {nameInfo.syllables || nameInfo.syllableCount || '—'}
+              Syllable count: {nameInfo.syllableCount || '—'}
             </Text>
           </View>
         </Section>
 
+        {nameInfo.funFacts.length ? (
+          <Section title="Fun Facts" subtitle="Highlights about this name">
+            {nameInfo.funFacts.map((fact, index) => (
+              <View key={`fact-${index}`} style={styles.fact}>
+                <Text style={styles.factText}>{fact}</Text>
+              </View>
+            ))}
+          </Section>
+        ) : null}
+
+        {nameInfo.variations.length ? (
+          <Section title="Variations" subtitle="Related spellings">
+            <View style={styles.chipRow}>
+              {nameInfo.variations.map(item => (
+                <View key={item} style={styles.chip}>
+                  <Text style={styles.chipText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          </Section>
+        ) : null}
+
+        {nameInfo.tags.length ? (
+          <Section title="Tags" defaultOpen={false}>
+            <View style={styles.chipRow}>
+              {nameInfo.tags.map(item => (
+                <View key={item} style={[styles.chip, styles.chipSoft]}>
+                  <Text style={styles.chipText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          </Section>
+        ) : null}
+
         <Section
-          title={`Famous ${nameInfo.name || 'names'}`}
+          title={`Famous ${nameInfo.name}`}
           subtitle="Notable people with this name"
           defaultOpen={false}>
-          <View style={styles.famousRow}>
+          {nameInfo.famousPeople.length ? (
+            <View style={styles.famousWrap}>
+              {nameInfo.famousPeople.map((person, index) => (
+                <View key={`${person.title}-${index}`} style={styles.famousCard}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {(person.title || '?').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.famousName}>{person.title}</Text>
+                  {person.subtitle ? (
+                    <Text style={styles.famousRole}>{person.subtitle}</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : (
             <View style={styles.famousCard}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{initial}</Text>
@@ -168,11 +289,10 @@ const NameInformation = ({navigation, route}) => {
               <Text style={styles.famousName}>Coming soon</Text>
               <Text style={styles.famousRole}>Famous namesakes</Text>
             </View>
-          </View>
+          )}
         </Section>
       </ScrollView>
 
-      {/* Fixed bottom action placeholder (Pass / Like) — no tab bar behind */}
       <View style={[styles.footer, {paddingBottom: footerPad}]}>
         <TouchableOpacity
           style={styles.passBtn}
@@ -219,6 +339,14 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: 20,
     color: T.colors.textPrimary,
+    paddingHorizontal: 8,
+  },
+  pronunciationLine: {
+    textAlign: 'center',
+    fontFamily: Fonts.medium,
+    fontSize: 13,
+    color: T.colors.textSecondary,
+    marginBottom: 6,
   },
   hearBtn: {
     alignSelf: 'center',
@@ -303,11 +431,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: T.colors.textPrimary,
   },
-  famousRow: {
+  chipRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    backgroundColor: T.colors.surfacePeach,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  chipSoft: {
+    backgroundColor: T.colors.primaryMuted,
+  },
+  chipText: {
+    fontFamily: Fonts.semibold,
+    fontSize: 12,
+    color: T.colors.textPrimary,
+  },
+  famousWrap: {
+    gap: 8,
   },
   famousCard: {
-    flex: 1,
     backgroundColor: T.colors.surfacePeach,
     borderRadius: 12,
     padding: 10,

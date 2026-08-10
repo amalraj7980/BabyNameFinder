@@ -73,9 +73,15 @@ export const createUserProfileOnce = async ({
   }
 
   const existing = snap.data() || {};
+  const nextEmail =
+    existing.email && String(existing.email).trim()
+      ? existing.email
+      : typeof email === 'string'
+        ? email
+        : '';
   const updatePayload = stripUndefined({
-    // Rules: email must stay the same on update
-    email: existing.email ?? (typeof email === 'string' ? email : ''),
+    // Allow filling empty guest email when upgrading to a real account
+    email: nextEmail,
     username: existing.username || safeUsername,
     fullName: fullName || existing.fullName || existing.username,
     isAnonymous: !!isAnonymous,

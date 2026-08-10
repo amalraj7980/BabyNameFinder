@@ -18,6 +18,14 @@ service cloud.firestore {
         && username.matches('^[a-zA-Z0-9_\\.]+$');
     }
 
+    function isPartnerMember(sessionId) {
+      return isSignedIn()
+        && (
+          get(/databases/$(database)/documents/partnerSessions/$(sessionId)).data.ownerUid == request.auth.uid
+          || get(/databases/$(database)/documents/partnerSessions/$(sessionId)).data.partnerUid == request.auth.uid
+        );
+    }
+
     // Baby name catalog — public read; signed-in can create/update (Console or app bootstrap)
     match /baby_names/{nameId} {
       allow read: if true;
@@ -46,8 +54,19 @@ service cloud.firestore {
         && request.resource.data.email is string
         && isValidUsername(request.resource.data.username);
 
+      // Allow email fill-in when upgrading anonymous/guest (empty email) → real account
       allow update: if isOwner(uid)
-        && request.resource.data.email == resource.data.email
+        && (
+          request.resource.data.email == resource.data.email
+          || (
+            resource.data.get('email', '') == ''
+            && request.resource.data.email is string
+          )
+          || (
+            resource.data.get('isAnonymous', false) == true
+            && request.resource.data.email is string
+          )
+        )
         && (
           !('username' in request.resource.data)
           || request.resource.data.username == resource.data.username
@@ -55,6 +74,11 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+
+      // Per-user favorites (nameId refs only)
+      match /favorites/{nameId} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     // Username uniqueness map
@@ -69,24 +93,69 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Likes
-    match /reactions/{uid}/likes/{nameId} {
-      allow read: if isOwner(uid);
+    // Likes / dislikes — allow owner full access under their reaction tree
+    match /reactions/{uid} {
+      allow read, write: if isOwner(uid);
 
-      allow create, update: if isOwner(uid)
-        && request.resource.data.nameId == nameId;
+      match /likes/{nameId} {
+        allow read: if isOwner(uid);
 
-      allow delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.nameId == nameId;
+
+        allow delete: if isOwner(uid);
+      }
+
+      match /dislikes/{nameId} {
+        allow read: if isOwner(uid);
+
+        allow create, update: if isOwner(uid)
+          && request.resource.data.nameId == nameId;
+
+        allow delete: if isOwner(uid);
+      }
     }
 
-    // Dislikes
-    match /reactions/{uid}/dislikes/{nameId} {
-      allow read: if isOwner(uid);
+    // Partner sessions (max 2 users; join via code in app logic)
+    match /partnerSessions/{sessionId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.ownerUid == request.auth.uid
+          || resource.data.partnerUid == request.auth.uid
+          // Allow reading by joinCode query for join flow (active sessions)
+          || resource.data.status == 'active'
+        );
 
-      allow create, update: if isOwner(uid)
-        && request.resource.data.nameId == nameId;
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.partnerUid == null
+        && request.resource.data.status == 'active'
+        && request.resource.data.joinCode is string;
 
-      allow delete: if isOwner(uid);
+      allow update: if isSignedIn()
+        && (
+          // Owner can close / refresh
+          resource.data.ownerUid == request.auth.uid
+          // Partner can claim empty partnerUid seat
+          || (
+            resource.data.partnerUid == null
+            && request.resource.data.partnerUid == request.auth.uid
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && request.resource.data.joinCode == resource.data.joinCode
+          )
+          // Partner can leave (clear their uid)
+          || (
+            resource.data.partnerUid == request.auth.uid
+            && request.resource.data.partnerUid == null
+          )
+        );
+
+      allow delete: if false;
+
+      match /favorites/{nameId} {
+        allow read: if isPartnerMember(sessionId);
+        allow create, update, delete: if isPartnerMember(sessionId);
+      }
     }
   }
 }

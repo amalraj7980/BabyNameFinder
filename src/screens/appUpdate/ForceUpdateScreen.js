@@ -20,6 +20,7 @@ import {AppContext} from '../../context/AppContext';
 import {
   openAppStoreListing,
   reapplyUpdateGateOnForeground,
+  startAndroidFlexibleUpdate,
   useAppUpdateStore,
 } from '../../services/appUpdate';
 import {
@@ -30,8 +31,7 @@ import {
 
 /**
  * CareerMate-parity update gate UI —
- * rocket hero → logo → title → message → CTA + secondary.
- * Uses solid brand CTA (no linear-gradient) so Metro resolves without that native module.
+ * force (blocking) + optional (Maybe later) + Android in-app flexible start.
  */
 const ForceUpdateScreen = () => {
   const insets = useSafeAreaInsets();
@@ -113,6 +113,22 @@ const ForceUpdateScreen = () => {
     }
     setOpeningStore(true);
     try {
+      // Android flexible / optional → Play in-app download; iOS / force → store.
+      if (
+        Platform.OS === 'android' &&
+        !__DEV__ &&
+        decision?.severity === 'optional' &&
+        decision?.androidUpdateType !== 'immediate'
+      ) {
+        try {
+          await startAndroidFlexibleUpdate();
+          dismissOptionalIosUpdate();
+          return;
+        } catch (e) {
+          await openAppStoreListing();
+          return;
+        }
+      }
       await openAppStoreListing();
     } finally {
       setOpeningStore(false);

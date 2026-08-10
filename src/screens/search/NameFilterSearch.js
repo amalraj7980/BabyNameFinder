@@ -1,21 +1,23 @@
-import React, {useState, useContext, useEffect, useCallback} from 'react';
+import React, {useState, useContext, useEffect, useCallback, memo} from 'react';
 import {
   Text,
   View,
   TextInput,
   TouchableOpacity,
   Switch,
-  TouchableWithoutFeedback,
-  Keyboard,
   StyleSheet,
   ScrollView,
   Platform,
+  KeyboardAvoidingView,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {AppContext} from '../../context/AppContext';
 import {Fonts} from '../../styles';
-import {DesignTokens as T} from '../../theme/designTokens';
+import {getTabBarStyle} from '../../routes/tabBarStyles';
 
 const C = {
   bg: '#FFF8F2',
@@ -27,6 +29,7 @@ const C = {
   boy: '#5EC2D7',
   girl: '#FF6B6B',
   unisex: '#98D8AA',
+  inputBg: '#FAFBFC',
 };
 
 const GENDER_OPTIONS = [
@@ -36,75 +39,114 @@ const GENDER_OPTIONS = [
   {label: 'Unisex', value: 'unisex', color: C.unisex},
 ];
 
+const FilterField = memo(function FilterField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  autoCapitalize = 'none',
+  maxLength,
+}) {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <View style={styles.field}>
+      <Text style={[styles.fieldLabel, focused && styles.fieldLabelActive]}>
+        {label}
+      </Text>
+      <TextInput
+        style={[styles.input, focused && styles.inputActive]}
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder={placeholder}
+        placeholderTextColor={C.muted}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={false}
+        autoComplete="off"
+        textContentType="none"
+        maxLength={maxLength}
+        returnKeyType="done"
+        blurOnSubmit
+        underlineColorAndroid="transparent"
+        importantForAutofill="no"
+      />
+    </View>
+  );
+});
+
 export default function NameFilterSearch({navigation}) {
   const insets = useSafeAreaInsets();
   const {seachfilterData, setSeachfilterData} = useContext(AppContext);
 
-  const [focusedInput, setFocusedInput] = useState(null);
-  const [isCompoundSwitchOn, setIsCompoundSwitchOn] = useState(false);
+  // Local draft avoids AppContext re-renders fighting TextInput focus
+  const [draft, setDraft] = useState({
+    firstLetter: '',
+    lastLetter: '',
+    contains: '',
+    compoundLetter: false,
+    gender: 'all',
+  });
 
-  useEffect(() => {
-    setIsCompoundSwitchOn(!!seachfilterData?.compoundLetter);
-  }, [seachfilterData]);
-
-  const handleFilterChange = useCallback(
-    (field, nextValue) => {
-      setSeachfilterData(prev => ({
-        ...prev,
-        [field]: nextValue,
-      }));
-    },
-    [setSeachfilterData],
+  useFocusEffect(
+    useCallback(() => {
+      const parent = navigation.getParent();
+      parent?.setOptions({
+        tabBarStyle: {display: 'none', height: 0},
+      });
+      return () => {
+        parent?.setOptions({
+          tabBarStyle: getTabBarStyle(insets.bottom),
+        });
+      };
+    }, [navigation, insets.bottom]),
   );
 
-  const toggleCompoundSwitch = useCallback(() => {
-    setIsCompoundSwitchOn(prev => {
-      const next = !prev;
-      handleFilterChange('compoundLetter', next);
-      return next;
+  useEffect(() => {
+    setDraft({
+      firstLetter: seachfilterData?.firstLetter ?? '',
+      lastLetter: seachfilterData?.lastLetter ?? '',
+      contains: seachfilterData?.contains ?? '',
+      compoundLetter: !!seachfilterData?.compoundLetter,
+      gender: seachfilterData?.gender ?? 'all',
     });
-  }, [handleFilterChange]);
+  }, [seachfilterData]);
+
+  const setField = useCallback((field, value) => {
+    setDraft(prev => ({...prev, [field]: value}));
+  }, []);
 
   const handleApply = useCallback(() => {
+    Keyboard.dismiss();
     setSeachfilterData(prev => ({
       ...prev,
+      firstLetter: (draft.firstLetter || '').trim(),
+      lastLetter: (draft.lastLetter || '').trim(),
+      contains: (draft.contains || '').trim(),
+      compoundLetter: !!draft.compoundLetter,
+      gender: draft.gender || 'all',
       search: false,
     }));
     navigation.goBack();
-  }, [navigation, setSeachfilterData]);
+  }, [draft, navigation, setSeachfilterData]);
 
   const handleReset = useCallback(() => {
-    setSeachfilterData({
+    const cleared = {
       firstLetter: '',
       lastLetter: '',
       contains: '',
       compoundLetter: false,
       gender: 'all',
+    };
+    setDraft(cleared);
+    setSeachfilterData({
+      ...cleared,
       search: false,
     });
-    setIsCompoundSwitchOn(false);
   }, [setSeachfilterData]);
 
-  const Field = ({label, field, value}) => {
-    const active = focusedInput === field;
-    return (
-      <View style={styles.field}>
-        <Text style={[styles.fieldLabel, active && styles.fieldLabelActive]}>
-          {label}
-        </Text>
-        <TextInput
-          style={[styles.input, active && styles.inputActive]}
-          value={value}
-          onChangeText={text => handleFilterChange(field, text)}
-          onFocus={() => setFocusedInput(field)}
-          onBlur={() => setFocusedInput(null)}
-          placeholderTextColor={C.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
-    );
-  };
+  const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12);
 
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
@@ -112,89 +154,122 @@ export default function NameFilterSearch({navigation}) {
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
-          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+          accessibilityRole="button"
+          accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={22} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Filter</Text>
-        <TouchableOpacity onPress={handleReset} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+        <TouchableOpacity
+          onPress={handleReset}
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+          accessibilityRole="button"
+          accessibilityLabel="Reset filters">
           <Text style={styles.resetText}>Reset</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
         <ScrollView
+          style={styles.flex}
           contentContainerStyle={[
             styles.content,
-            {paddingBottom: Math.max(insets.bottom, 16) + 24},
+            {paddingBottom: bottomPad + 88},
           ]}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.card}>
-            <Field
-              label="Starts with"
-              field="firstLetter"
-              value={seachfilterData?.firstLetter || ''}
-            />
-            <Field
-              label="Ends with"
-              field="lastLetter"
-              value={seachfilterData?.lastLetter || ''}
-            />
-            <Field
-              label="Contains"
-              field="contains"
-              value={seachfilterData?.contains || ''}
-            />
-
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Compound names only</Text>
-              <Switch
-                trackColor={{false: '#D8DEE6', true: '#FFD0D0'}}
-                thumbColor={isCompoundSwitchOn ? C.primary : '#F4F4F5'}
-                ios_backgroundColor="#D8DEE6"
-                onValueChange={toggleCompoundSwitch}
-                value={isCompoundSwitchOn}
+          keyboardDismissMode="on-drag"
+          nestedScrollEnabled
+          bounces
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews={false}>
+          <Pressable onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.card}>
+              <FilterField
+                label="Starts with"
+                value={draft.firstLetter}
+                onChangeText={text => setField('firstLetter', text)}
+                placeholder="e.g. A"
+                maxLength={12}
               />
-            </View>
+              <FilterField
+                label="Ends with"
+                value={draft.lastLetter}
+                onChangeText={text => setField('lastLetter', text)}
+                placeholder="e.g. a"
+                maxLength={12}
+              />
+              <FilterField
+                label="Contains"
+                value={draft.contains}
+                onChangeText={text => setField('contains', text)}
+                placeholder="e.g. an"
+                maxLength={24}
+              />
 
-            <Text style={styles.sectionLabel}>Gender</Text>
-            <View style={styles.genderWrap}>
-              {GENDER_OPTIONS.map(opt => {
-                const selected = seachfilterData?.gender === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      styles.genderChip,
-                      selected && {
-                        backgroundColor: opt.color,
-                        borderColor: opt.color,
-                      },
-                    ]}
-                    onPress={() => handleFilterChange('gender', opt.value)}
-                    activeOpacity={0.85}>
-                    <Text
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleTextCol}>
+                  <Text style={styles.toggleLabel}>Compound names only</Text>
+                  <Text style={styles.toggleHint}>
+                    Off = all names. On = only names with spaces or hyphens.
+                  </Text>
+                </View>
+                <Switch
+                  trackColor={{false: '#D8DEE6', true: '#FFD0D0'}}
+                  thumbColor={draft.compoundLetter ? C.primary : '#F4F4F5'}
+                  ios_backgroundColor="#D8DEE6"
+                  onValueChange={value => setField('compoundLetter', value)}
+                  value={!!draft.compoundLetter}
+                />
+              </View>
+
+              <Text style={styles.sectionLabel}>Gender</Text>
+              <View style={styles.genderWrap}>
+                {GENDER_OPTIONS.map(opt => {
+                  const selected = draft.gender === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
                       style={[
-                        styles.genderChipText,
-                        selected && styles.genderChipTextOn,
-                        !selected && {color: opt.color},
-                      ]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                        styles.genderChip,
+                        selected && {
+                          backgroundColor: opt.color,
+                          borderColor: opt.color,
+                        },
+                      ]}
+                      onPress={() => setField('gender', opt.value)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{selected}}>
+                      <Text
+                        style={[
+                          styles.genderChipText,
+                          selected && styles.genderChipTextOn,
+                          !selected && {color: opt.color},
+                        ]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+          </Pressable>
+        </ScrollView>
 
+        <View style={[styles.footer, {paddingBottom: bottomPad}]}>
           <TouchableOpacity
             style={styles.applyBtn}
             onPress={handleApply}
-            activeOpacity={0.88}>
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Apply filters">
             <Text style={styles.applyText}>Apply filters</Text>
           </TouchableOpacity>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -214,11 +289,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.bg,
   },
+  flex: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
+    zIndex: 2,
   },
   backBtn: {
     width: 40,
@@ -240,7 +319,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.semibold,
     fontSize: 15,
     color: C.primary,
-    minWidth: 40,
+    minWidth: 48,
     textAlign: 'right',
   },
   content: {
@@ -252,8 +331,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingHorizontal: 18,
     paddingTop: 18,
-    paddingBottom: 8,
-    marginBottom: 20,
+    paddingBottom: 14,
     ...softShadow,
   },
   field: {
@@ -269,15 +347,20 @@ const styles = StyleSheet.create({
     color: C.primary,
   },
   input: {
+    minHeight: 48,
     height: 48,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.border,
     paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     fontFamily: Fonts.semibold,
     fontSize: 16,
+    lineHeight: 20,
     color: C.text,
-    backgroundColor: '#FAFBFC',
+    backgroundColor: C.inputBg,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   inputActive: {
     borderColor: C.primary,
@@ -292,11 +375,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: C.border,
     marginBottom: 14,
+    gap: 12,
+  },
+  toggleTextCol: {
+    flex: 1,
+    paddingRight: 8,
   },
   toggleLabel: {
     fontFamily: Fonts.semibold,
     fontSize: 15,
     color: C.text,
+  },
+  toggleHint: {
+    marginTop: 2,
+    fontFamily: Fonts.regular,
+    fontSize: 11,
+    color: C.muted,
   },
   sectionLabel: {
     fontFamily: Fonts.medium,
@@ -308,7 +402,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -4,
-    marginBottom: 10,
   },
   genderChip: {
     paddingHorizontal: 16,
@@ -327,16 +420,23 @@ const styles = StyleSheet.create({
   genderChipTextOn: {
     color: '#FFFFFF',
   },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: C.bg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
   applyBtn: {
-    height: 42,
-    borderRadius: 21,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: C.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   applyText: {
     fontFamily: Fonts.bold,
-    fontSize: 14,
+    fontSize: 15,
     color: '#FFFFFF',
   },
 });

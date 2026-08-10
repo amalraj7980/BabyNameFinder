@@ -7,6 +7,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {DesignTokens as T} from '../theme/designTokens';
 import {getTabBarStyle, tabBarLabelStyle} from './tabBarStyles';
+import TabExitOnBackHandler from './TabExitOnBackHandler';
 
 import DiscoverScreen from '../screens/discover/DiscoverScreen';
 import MatchesScreen from '../screens/matches/MatchesScreen';
@@ -104,24 +105,27 @@ const MainTabs = () => {
   const insets = useSafeAreaInsets();
 
   return (
-    <Tab.Navigator
-      safeAreaInsets={{bottom: 0}}
-      screenOptions={({route}) => ({
-        headerShown: false,
-        tabBarActiveTintColor: T.colors.primary,
-        tabBarInactiveTintColor: T.colors.tabInactive,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: getTabBarStyle(insets.bottom),
-        tabBarLabelStyle,
-        tabBarIconStyle: styles.tabIcon,
-        tabBarItemStyle: styles.tabItem,
-        tabBarIcon: ({focused, color, size}) =>
-          tabIcon(route.name, focused, color, Math.min(size, 24)),
-      })}>
-      <Tab.Screen name="Discover" component={DiscoverStack} />
-      <Tab.Screen name="Matches" component={MatchesStack} />
-      <Tab.Screen name="Preferences" component={PreferencesStack} />
-    </Tab.Navigator>
+    <>
+      <TabExitOnBackHandler />
+      <Tab.Navigator
+        safeAreaInsets={{bottom: 0}}
+        screenOptions={({route}) => ({
+          headerShown: false,
+          tabBarActiveTintColor: T.colors.primary,
+          tabBarInactiveTintColor: T.colors.tabInactive,
+          tabBarHideOnKeyboard: true,
+          tabBarStyle: getTabBarStyle(insets.bottom),
+          tabBarLabelStyle,
+          tabBarIconStyle: styles.tabIcon,
+          tabBarItemStyle: styles.tabItem,
+          tabBarIcon: ({focused, color, size}) =>
+            tabIcon(route.name, focused, color, Math.min(size, 24)),
+        })}>
+        <Tab.Screen name="Discover" component={DiscoverStack} />
+        <Tab.Screen name="Matches" component={MatchesStack} />
+        <Tab.Screen name="Preferences" component={PreferencesStack} />
+      </Tab.Navigator>
+    </>
   );
 };
 
