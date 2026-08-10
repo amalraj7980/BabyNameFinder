@@ -88,7 +88,7 @@ const SignInScreen = ({navigation}) => {
         navigation.replace('EmailVerification');
         return;
       }
-      navigation.getParent()?.navigate('Home');
+      navigation.getParent()?.navigate('MainTabs');
     } catch (e) {
       setLoading(false);
       Flash.showError(typeof e === 'string' ? e : e?.message || 'Login failed');

@@ -45,7 +45,10 @@ export const navigateToHome = () => {
   }
   navigationRef.dispatch(
     CommonActions.navigate({
-      name: 'Home',
+      name: 'MainTabs',
+      params: {
+        screen: 'Discover',
+      },
     }),
   );
 };

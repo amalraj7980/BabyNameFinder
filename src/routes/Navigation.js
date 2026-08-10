@@ -1,11 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {AppState, StatusBar} from 'react-native';
-import {createDrawerNavigator} from '@react-navigation/drawer';
 import {NavigationContainer} from '@react-navigation/native';
-import LandingScreen from '../screens/Auth/LandingScreen';
-import AppStack from './AppStack';
-import AuthStack from './AuthStack';
-import CustomDrawerContent from '../routes/CustomDrawer/CustomDrawerContent';
+import {createStackNavigator} from '@react-navigation/stack';
 import {Storage} from '../util';
 import {AuthContextProvider} from '../context/AuthContext';
 import {AppContextProvider} from '../context/AppContext';
@@ -22,76 +18,55 @@ import {
   useAppUpdateStore,
 } from '../services/appUpdate';
 import {trackAppOpen} from '../services/rating/ratingService';
+import {getOnboardingDone} from '../services/onboardingStorage';
+import OnboardingStack from './OnboardingStack';
+import MainTabs from './MainTabs';
+import AuthStack from './AuthStack';
+import {DesignTokens as T} from '../theme/designTokens';
 
-const Drawer = createDrawerNavigator();
-
-/** Same as CareerMate AuthNavigationBridge — minimum splash on launch. */
+const RootStack = createStackNavigator();
 const MIN_SPLASH_DURATION = 5000;
 
 const RouteStack = () => {
-  const [appSetupComplete, setAppSetupComplete] = useState(false);
-  const [isLoading, setIsloading] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(true);
 
   useEffect(() => {
-    checkAppSetup();
+    (async () => {
+      try {
+        const [setupFlag, onboardingDone] = await Promise.all([
+          Storage.getAppSetUpComplete(),
+          getOnboardingDone(),
+        ]);
+        // New Figma onboarding if neither legacy setup nor v2 onboarding completed
+        setNeedsOnboarding(!(setupFlag === 'true' || onboardingDone));
+      } catch (e) {
+        setNeedsOnboarding(true);
+      } finally {
+        setReady(true);
+      }
+    })();
   }, []);
 
-  const checkAppSetup = async () => {
-    try {
-      setIsloading(true);
-      const appSetupFlag = await Storage.getAppSetUpComplete();
-      setAppSetupComplete(appSetupFlag === 'true');
-      setIsloading(false);
-    } catch (error) {
-      console.log('Error checking app setup:', error);
-      setIsloading(false);
-    }
-  };
-
-  const handleStart = async () => {
-    try {
-      await Storage.setAppSetUpComplete('true');
-      setAppSetupComplete(true);
-    } catch (error) {
-      console.log('Error setting app setup flag:', error);
-    }
-  };
+  if (!ready) {
+    return <SplashScreen />;
+  }
 
   return (
-    <>
-      {isLoading ? (
-        <SplashScreen />
-      ) : (
-        <Drawer.Navigator
-          screenOptions={{headerShown: false}}
-          drawerContent={props => (
-            <CustomDrawerContent {...props} contentContainerStyle={{flex: 1}} />
-          )}>
-          {appSetupComplete ? (
-            <>
-              <Drawer.Screen name="Home" component={AppStack} />
-              <Drawer.Screen name="Auth" component={AuthStack} />
-            </>
-          ) : (
-            <Drawer.Screen
-              name="LandingScreen"
-              options={{swipeEnabled: false, headerShown: false}}>
-              {props => <LandingScreen {...props} handleStart={handleStart} />}
-            </Drawer.Screen>
-          )}
-        </Drawer.Navigator>
-      )}
-    </>
+    <RootStack.Navigator screenOptions={{headerShown: false}}>
+      {needsOnboarding ? (
+        <RootStack.Screen name="Onboarding" component={OnboardingStack} />
+      ) : null}
+      <RootStack.Screen name="MainTabs" component={MainTabs} />
+      <RootStack.Screen
+        name="Auth"
+        component={AuthStack}
+        options={{presentation: 'modal'}}
+      />
+    </RootStack.Navigator>
   );
 };
 
-/**
- * CareerMate-style update gate bridge:
- * - startup Firestore / Play check
- * - hold splash until check done + min 5s
- * - ForceUpdate UI when required
- * - foreground recheck after store / recents
- */
 const ThemedNavigation = () => {
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
   const {navigationTheme, colors, hydrated} = useTheme();
@@ -110,7 +85,6 @@ const ThemedNavigation = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // After "Close the app" / recents / return from store — same as CareerMate.
   useEffect(() => {
     const onAppStateChange = next => {
       if (next !== 'active') {
@@ -132,17 +106,29 @@ const ThemedNavigation = () => {
     return <SplashScreen />;
   }
 
+  const themed = {
+    ...navigationTheme,
+    colors: {
+      ...navigationTheme.colors,
+      primary: T.colors.primary,
+      background: T.colors.background,
+      card: T.colors.surface,
+      text: T.colors.textPrimary,
+      border: T.colors.border,
+      notification: T.colors.primary,
+    },
+  };
+
   return (
     <>
       <StatusBar
         barStyle={colors.statusBarStyle || 'dark-content'}
-        backgroundColor={colors.headerBg || colors.primary}
-        translucent={false}
+        backgroundColor={T.colors.background}
       />
       <NavigationContainer
         ref={navigationRef}
         linking={linkingConfig}
-        theme={navigationTheme}>
+        theme={themed}>
         <RouteStack />
       </NavigationContainer>
     </>

@@ -57,6 +57,39 @@ writeIfExists(
   voiceGradle,
 );
 
+const ttsGradle = `def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace "net.no_mad.tts"
+    compileSdkVersion safeExtGet('compileSdkVersion', 36)
+
+    defaultConfig {
+        minSdkVersion safeExtGet('minSdkVersion', 24)
+        targetSdkVersion safeExtGet('targetSdkVersion', 36)
+        versionCode 1
+        versionName "1.0"
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.facebook.react:react-android'
+}
+`;
+
+writeIfExists(
+  'node_modules/react-native-tts/android/build.gradle',
+  ttsGradle,
+);
+
 function stripSupportDeps(relPath) {
   const full = path.join(root, relPath);
   if (!fs.existsSync(full)) {

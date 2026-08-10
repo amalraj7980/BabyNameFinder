@@ -10,6 +10,10 @@ import {I18nManager, AppState} from 'react-native';
 import RNRestart from 'react-native-restart';
 import Storage from '../util/Storage'; // Use 'storage' instead of 'Storage'
 import {
+  getCardStyle as loadCardStyle,
+  setCardStyle as persistCardStyle,
+} from '../services/onboardingStorage';
+import {
   initConnection,
   getProducts,
   getPurchaseHistory,
@@ -89,6 +93,14 @@ export const AppContextProvider = ({children}) => {
   const [swipeBlocked, setSwipeBlocked] = useState(false);
   const [deviceId, setDeviceId] = useState();
   const [babyNamesCount, setBabyNamesCount] = useState();
+  const [discoverCardStyle, setDiscoverCardStyleState] =
+    useState('detailed');
+
+  const updateDiscoverCardStyle = useCallback(async style => {
+    const next = style === 'simple' ? 'simple' : 'detailed';
+    setDiscoverCardStyleState(next);
+    await persistCardStyle(next);
+  }, []);
 
   const getDeviceId = async () => {
     const deviceId = await DeviceInfo.getUniqueId();
@@ -122,7 +134,17 @@ export const AppContextProvider = ({children}) => {
       }
     };
 
+    const loadCardStyleFromStorage = async () => {
+      try {
+        const style = await loadCardStyle();
+        setDiscoverCardStyleState(style === 'simple' ? 'simple' : 'detailed');
+      } catch (error) {
+        console.error('Error loading card style from storage:', error);
+      }
+    };
+
     loadIsPrimeFromStorage();
+    loadCardStyleFromStorage();
   }, []);
   const [appState, setAppState] = useState(AppState.currentState);
 
@@ -366,6 +388,8 @@ export const AppContextProvider = ({children}) => {
       setDeviceId,
       babyNamesCount,
       setBabyNamesCount,
+      discoverCardStyle,
+      updateDiscoverCardStyle,
     }),
     [
       locale,
@@ -383,6 +407,8 @@ export const AppContextProvider = ({children}) => {
       swipeBlocked,
       deviceId,
       babyNamesCount,
+      discoverCardStyle,
+      updateDiscoverCardStyle,
       changeLocale,
     ],
   );

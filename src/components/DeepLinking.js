@@ -9,15 +9,11 @@ export const linkingConfig = {
   prefixes,
   config: {
     screens: {
-      Home: {
+      MainTabs: {
         screens: {
-          AiAssistant: {
-            path: 'today/bots/ketoOrNot/genesisAI.php',
-            parse: {
-              assessment: '1',
-              assistantName: 'R10-Baby Names Crafter',
-            },
-          },
+          Discover: 'discover',
+          Matches: 'matches',
+          Preferences: 'preferences',
         },
       },
       Auth: {
