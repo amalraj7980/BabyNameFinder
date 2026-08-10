@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import {Colors} from '../../styles';
 import {AuthContext} from '../../context/AuthContext';
+import SafeScreen from '../../components/SafeScreen';
 import {styles} from './forgotPasswordScreenStyles';
 import {navigateToHome} from '../../routes/navigationRef';
 
@@ -98,68 +99,70 @@ const EmailVerificationScreen = ({navigation}) => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Verify your email</Text>
-      <Text style={styles.description}>
-        We sent a verification link to your Gmail / inbox. Open it to activate
-        your account.
-      </Text>
-
-      <View
-        style={{
-          backgroundColor: Colors.lightGray,
-          borderRadius: 8,
-          padding: 14,
-          marginBottom: 16,
-        }}>
-        <Text style={{color: Colors.textLight, marginBottom: 4}}>Email</Text>
-        <Text style={{color: Colors.textGray, fontWeight: '600'}}>
-          {email || '—'}
+    <SafeScreen backgroundColor={Colors.primary}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Verify your email</Text>
+        <Text style={styles.description}>
+          We sent a verification link to your Gmail / inbox. Open it to activate
+          your account.
         </Text>
+
+        <View
+          style={{
+            backgroundColor: Colors.lightGray,
+            borderRadius: 8,
+            padding: 14,
+            marginBottom: 16,
+          }}>
+          <Text style={{color: Colors.textLight, marginBottom: 4}}>Email</Text>
+          <Text style={{color: Colors.textGray, fontWeight: '600'}}>
+            {email || '—'}
+          </Text>
+        </View>
+
+        <Text style={[styles.description, {marginBottom: 8}]}>
+          1. Open the email from Firebase / Baby Names{'\n'}
+          2. Tap the verification link{'\n'}
+          3. Return here and tap “I’ve verified”
+        </Text>
+        <Text style={[styles.description, {fontSize: 13}]}>
+          Check spam if you don’t see it within a minute.
+        </Text>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {localMessage ? (
+          <Text style={{color: Colors.Boy, marginBottom: 10}}>{localMessage}</Text>
+        ) : null}
+
+        <TouchableOpacity
+          onPress={handleContinue}
+          style={[styles.resetButton, loading ? styles.disabledButton : null]}
+          disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.resetButtonText}>I’ve verified</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleResend}
+          disabled={loading || resendCooldown > 0}
+          style={{marginTop: 18, alignItems: 'center'}}>
+          <Text style={{color: Colors.primary, fontWeight: '600'}}>
+            {resendCooldown > 0
+              ? `Resend in ${resendCooldown}s`
+              : 'Resend verification email'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleSignOut}
+          style={{marginTop: 24, alignItems: 'center'}}>
+          <Text style={{color: Colors.textLight}}>Sign out</Text>
+        </TouchableOpacity>
       </View>
-
-      <Text style={[styles.description, {marginBottom: 8}]}>
-        1. Open the email from Firebase / Baby Names{'\n'}
-        2. Tap the verification link{'\n'}
-        3. Return here and tap “I’ve verified”
-      </Text>
-      <Text style={[styles.description, {fontSize: 13}]}>
-        Check spam if you don’t see it within a minute.
-      </Text>
-
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      {localMessage ? (
-        <Text style={{color: Colors.Boy, marginBottom: 10}}>{localMessage}</Text>
-      ) : null}
-
-      <TouchableOpacity
-        onPress={handleContinue}
-        style={[styles.resetButton, loading ? styles.disabledButton : null]}
-        disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="white" />
-        ) : (
-          <Text style={styles.resetButtonText}>I’ve verified</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        onPress={handleResend}
-        disabled={loading || resendCooldown > 0}
-        style={{marginTop: 18, alignItems: 'center'}}>
-        <Text style={{color: Colors.primary, fontWeight: '600'}}>
-          {resendCooldown > 0
-            ? `Resend in ${resendCooldown}s`
-            : 'Resend verification email'}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        onPress={handleSignOut}
-        style={{marginTop: 24, alignItems: 'center'}}>
-        <Text style={{color: Colors.textLight}}>Sign out</Text>
-      </TouchableOpacity>
-    </View>
+    </SafeScreen>
   );
 };
 

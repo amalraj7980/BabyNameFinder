@@ -4,7 +4,7 @@
   - Email verification send + poll
 */
 
-import React, {createContext, useState, useEffect, useCallback} from 'react';
+import React, {createContext, useState, useEffect, useCallback, useMemo} from 'react';
 import {Linking} from 'react-native';
 import {
   logoutFirebase,
@@ -251,27 +251,48 @@ export const AuthContextProvider = ({children}) => {
     }
   }, []);
 
-  const value = {
-    ...val,
-    loginUserWithCredentials,
-    signUpWithCredentials,
-    sendPasswordReset,
-    resetPassword,
-    resendVerificationEmail: resendVerificationEmailFn,
-    checkEmailVerified,
-    checkAuthState,
-    loginUser,
-    logoutUser,
-    loginOccurred,
-    appSetupComplete,
-    setAppSetupComplete,
-    checkAppSetup,
-    firebaseReady,
-    pendingResetCode,
-    setPendingResetCode,
-    error: authError,
-    clearError,
-  };
+  const value = useMemo(
+    () => ({
+      ...val,
+      loginUserWithCredentials,
+      signUpWithCredentials,
+      sendPasswordReset,
+      resetPassword,
+      resendVerificationEmail: resendVerificationEmailFn,
+      checkEmailVerified,
+      checkAuthState,
+      loginUser,
+      logoutUser,
+      loginOccurred,
+      appSetupComplete,
+      setAppSetupComplete,
+      checkAppSetup,
+      firebaseReady,
+      pendingResetCode,
+      setPendingResetCode,
+      error: authError,
+      clearError,
+    }),
+    [
+      val,
+      loginUserWithCredentials,
+      signUpWithCredentials,
+      sendPasswordReset,
+      resetPassword,
+      resendVerificationEmailFn,
+      checkEmailVerified,
+      checkAuthState,
+      loginUser,
+      logoutUser,
+      loginOccurred,
+      appSetupComplete,
+      checkAppSetup,
+      firebaseReady,
+      pendingResetCode,
+      authError,
+      clearError,
+    ],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

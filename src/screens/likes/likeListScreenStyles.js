@@ -4,7 +4,8 @@ import {Colors} from '../../styles';
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
     backgroundColor: '#454545',
   },
   itemSeparator: {
@@ -42,5 +43,23 @@ export const styles = StyleSheet.create({
     width: 45,
     height: 30,
     borderRadius: 15,
+  },
+  name: {
+    fontSize: 16,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    height: '100%',
+    position: 'relative',
+    top: 1,
+  },
+  emptyStateText: {
+    color: Colors.tintGray,
+    fontSize: 18,
+  },
+  listMargin: {
+    margin: 0,
   },
 });

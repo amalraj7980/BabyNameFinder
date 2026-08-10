@@ -97,6 +97,7 @@ import React, {useState, useEffect, useRef} from 'react';
 import {StyleSheet, View, ActivityIndicator, BackHandler} from 'react-native';
 import {WebView} from 'react-native-webview';
 import {Colors} from '../../styles';
+import SafeScreen from '../../components/SafeScreen';
 import {styles} from './termsOfServiceStyles';
 
 
@@ -134,27 +135,29 @@ const TermsOfService = () => {
   }, [canGoBack]);
 
   return (
-    <View style={styles.container}>
-      <WebView
-        ref={webViewRef}
-        source={{
-          uri: 'https://riafy.me/wellness/terms.php?apptitle=Baby%20Names%20App',
-        }}
-        onLoadStart={() => setIsLoading(true)}
-        onLoad={() => setIsLoading(false)}
-        onLoadEnd={() => setIsLoading(false)}
-        onShouldStartLoadWithRequest={request => true}
-        onNavigationStateChange={navState => {
-          setCanGoBack(navState.canGoBack);
-        }}
-        startInLoadingState={true}
-      />
-      {isLoading && (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-      )}
-    </View>
+    <SafeScreen backgroundColor={Colors.background || Colors.WHITE}>
+      <View style={styles.container}>
+        <WebView
+          ref={webViewRef}
+          source={{
+            uri: 'https://riafy.me/wellness/terms.php?apptitle=Baby%20Names%20App',
+          }}
+          onLoadStart={() => setIsLoading(true)}
+          onLoad={() => setIsLoading(false)}
+          onLoadEnd={() => setIsLoading(false)}
+          onShouldStartLoadWithRequest={request => true}
+          onNavigationStateChange={navState => {
+            setCanGoBack(navState.canGoBack);
+          }}
+          startInLoadingState={true}
+        />
+        {isLoading && (
+          <View style={styles.loader}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        )}
+      </View>
+    </SafeScreen>
   );
 };
 

@@ -12,7 +12,6 @@ export const styles = StyleSheet.create({
     fontSize: 20,
     marginBottom: 24,
     marginTop: 24,
-    paddingTop: 50,
     color: Colors.lightGray,
   },
   inputContainer: {

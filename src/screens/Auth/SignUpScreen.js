@@ -13,6 +13,7 @@ import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
 import CustomPopup from '../../components/CustomPopup';
 import AppInput from '../../components/AppInput';
+import SafeScreen from '../../components/SafeScreen';
 import {styles} from './signUpScreenStyles';
 import {validateRegisterForm} from '../../utils/authValidation';
 
@@ -92,115 +93,117 @@ const SignUpScreen = ({navigation}) => {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <Text
-          style={{
-            fontFamily: Fonts.bold,
-            fontSize: 22,
-            color: Colors.WHITE,
-            alignSelf: 'flex-start',
-            marginTop: 12,
-            marginBottom: 8,
-          }}>
-          Create account
-        </Text>
+    <SafeScreen backgroundColor={Colors.primary}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <Text
+            style={{
+              fontFamily: Fonts.bold,
+              fontSize: 22,
+              color: Colors.WHITE,
+              alignSelf: 'flex-start',
+              marginTop: 12,
+              marginBottom: 8,
+            }}>
+            Create account
+          </Text>
 
-        <AppInput
-          label="Full name"
-          leftIcon="person"
-          value={fullName}
-          onChangeText={setFullName}
-          placeholder="Full name"
-          autoCapitalize="words"
-        />
+          <AppInput
+            label="Full name"
+            leftIcon="person"
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="Full name"
+            autoCapitalize="words"
+          />
 
-        <AppInput
-          label={locale?.placeholder?.email || 'Email'}
-          leftIcon="mail"
-          value={email}
-          onChangeText={setEmail}
-          placeholder={locale?.placeholder?.email || 'Email'}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
+          <AppInput
+            label={locale?.placeholder?.email || 'Email'}
+            leftIcon="mail"
+            value={email}
+            onChangeText={setEmail}
+            placeholder={locale?.placeholder?.email || 'Email'}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
 
-        <AppInput
-          label={locale?.placeholder?.password || 'Password'}
-          leftIcon="key"
-          leftIconSet="fa"
-          value={password}
-          onChangeText={setPassword}
-          placeholder={locale?.placeholder?.password || 'Password'}
-          secureTextEntry
-        />
+          <AppInput
+            label={locale?.placeholder?.password || 'Password'}
+            leftIcon="key"
+            leftIconSet="fa"
+            value={password}
+            onChangeText={setPassword}
+            placeholder={locale?.placeholder?.password || 'Password'}
+            secureTextEntry
+          />
 
-        <AppInput
-          label={locale?.placeholder?.confirmPassword || 'Confirm password'}
-          leftIcon="key"
-          leftIconSet="fa"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          placeholder={
-            locale?.placeholder?.confirmPassword || 'Confirm password'
-          }
-          secureTextEntry
-          error={fieldError || authError}
-        />
+          <AppInput
+            label={locale?.placeholder?.confirmPassword || 'Confirm password'}
+            leftIcon="key"
+            leftIconSet="fa"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder={
+              locale?.placeholder?.confirmPassword || 'Confirm password'
+            }
+            secureTextEntry
+            error={fieldError || authError}
+          />
 
-        <TouchableOpacity
-          style={[styles.button, loading ? styles.disabledButton : null]}
-          onPress={signupHandler}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={[styles.buttonText, {fontFamily: Fonts.semibold}]}>
-              {locale?.lets_go || 'Create account'}
+          <TouchableOpacity
+            style={[styles.button, loading ? styles.disabledButton : null]}
+            onPress={signupHandler}
+            disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={[styles.buttonText, {fontFamily: Fonts.semibold}]}>
+                {locale?.lets_go || 'Create account'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <CustomPopup
+            isVisible={isErrorPopupVisible}
+            message={signupError}
+            title={'Error'}
+            style={{width: '90%', height: 200}}
+            onClose={() => setIsErrorPopupVisible(false)}
+            onCancel={() => setIsErrorPopupVisible(false)}
+            cancelText="Cancel"
+          />
+
+          <TouchableOpacity
+            style={{padding: 24}}
+            onPress={() => navigation.navigate('SignIn')}>
+            <Text style={[styles.buttonText, {fontFamily: Fonts.medium}]}>
+              {locale?.alreadyHaveAnAccount || 'Already have an account? Sign in'}
             </Text>
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
 
-        <CustomPopup
-          isVisible={isErrorPopupVisible}
-          message={signupError}
-          title={'Error'}
-          style={{width: '90%', height: 200}}
-          onClose={() => setIsErrorPopupVisible(false)}
-          onCancel={() => setIsErrorPopupVisible(false)}
-          cancelText="Cancel"
-        />
-
-        <TouchableOpacity
-          style={{padding: 24}}
-          onPress={() => navigation.navigate('SignIn')}>
-          <Text style={[styles.buttonText, {fontFamily: Fonts.medium}]}>
-            {locale?.alreadyHaveAnAccount || 'Already have an account? Sign in'}
+          <Text style={[styles.LinkText, {fontFamily: Fonts.regular}]}>
+            {locale?.privacyPolicy || 'By continuing you agree to our '}
+            <Text
+              onPress={() => Linking.openURL(TermsAndConditionsUrl)}
+              style={[
+                styles.LinkText,
+                {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
+              ]}>
+              Terms of Service
+            </Text>
+            <Text> and </Text>
+            <Text
+              onPress={() => Linking.openURL(privacyPolicyUrl)}
+              style={[
+                styles.LinkText,
+                {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
+              ]}>
+              Privacy Policy
+            </Text>
           </Text>
-        </TouchableOpacity>
-
-        <Text style={[styles.LinkText, {fontFamily: Fonts.regular}]}>
-          {locale?.privacyPolicy || 'By continuing you agree to our '}
-          <Text
-            onPress={() => Linking.openURL(TermsAndConditionsUrl)}
-            style={[
-              styles.LinkText,
-              {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
-            ]}>
-            Terms of Service
-          </Text>
-          <Text> and </Text>
-          <Text
-            onPress={() => Linking.openURL(privacyPolicyUrl)}
-            style={[
-              styles.LinkText,
-              {textDecorationLine: 'underline', fontFamily: Fonts.semibold},
-            ]}>
-            Privacy Policy
-          </Text>
-        </Text>
-      </View>
-    </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </SafeScreen>
   );
 };
 

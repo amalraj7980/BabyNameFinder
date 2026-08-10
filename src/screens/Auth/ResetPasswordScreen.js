@@ -7,7 +7,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
-import {Fonts} from '../../styles';
+import {Fonts, Colors} from '../../styles';
 import {styles} from './forgotPasswordScreenStyles';
 import {
   validatePassword,
@@ -15,6 +15,7 @@ import {
 } from '../../utils/authValidation';
 import {AuthContext} from '../../context/AuthContext';
 import AppInput from '../../components/AppInput';
+import SafeScreen from '../../components/SafeScreen';
 
 const ResetPasswordScreen = ({navigation, route}) => {
   const {resetPassword, error, clearError} = React.useContext(AuthContext);
@@ -56,52 +57,54 @@ const ResetPasswordScreen = ({navigation, route}) => {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <Text style={[styles.title, {fontFamily: Fonts.bold}]}>
-          Set new password
-        </Text>
-        <Text style={[styles.description, {fontFamily: Fonts.regular}]}>
-          Choose a strong password for your account.
-        </Text>
+    <SafeScreen backgroundColor={Colors.primary}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <Text style={[styles.title, {fontFamily: Fonts.bold}]}>
+            Set new password
+          </Text>
+          <Text style={[styles.description, {fontFamily: Fonts.regular}]}>
+            Choose a strong password for your account.
+          </Text>
 
-        <AppInput
-          label="New password"
-          leftIcon="key"
-          leftIconSet="fa"
-          value={password}
-          onChangeText={setPassword}
-          placeholder="New password"
-          secureTextEntry
-          autoCapitalize="none"
-        />
-        <AppInput
-          label="Confirm new password"
-          leftIcon="key"
-          leftIconSet="fa"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          placeholder="Confirm new password"
-          secureTextEntry
-          autoCapitalize="none"
-          error={fieldError || error}
-        />
+          <AppInput
+            label="New password"
+            leftIcon="key"
+            leftIconSet="fa"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="New password"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <AppInput
+            label="Confirm new password"
+            leftIcon="key"
+            leftIconSet="fa"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="Confirm new password"
+            secureTextEntry
+            autoCapitalize="none"
+            error={fieldError || error}
+          />
 
-        <TouchableOpacity
-          onPress={handleReset}
-          style={[styles.resetButton, loading ? styles.disabledButton : null]}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text
-              style={[styles.resetButtonText, {fontFamily: Fonts.semibold}]}>
-              Update password
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </TouchableWithoutFeedback>
+          <TouchableOpacity
+            onPress={handleReset}
+            style={[styles.resetButton, loading ? styles.disabledButton : null]}
+            disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text
+                style={[styles.resetButtonText, {fontFamily: Fonts.semibold}]}>
+                Update password
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </TouchableWithoutFeedback>
+    </SafeScreen>
   );
 };
 

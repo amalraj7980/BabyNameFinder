@@ -26,10 +26,13 @@ import {Colors} from '../../styles';
 import Feather from 'react-native-vector-icons/Feather';
 import {AppContext} from '../../context/AppContext';
 import {Storage} from '../../util';
+import SafeScreen from '../../components/SafeScreen';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {styles} from './inAppPurchaseStyles';
 
 
 const InAppPurchase = ({navigation}) => {
+  const insets = useSafeAreaInsets();
   const subscriptionIds = ['monthly_premium_ios4'];
   const lifetimeIds = ['lifetime_iap_ios4'];
   const [lifeTimeProductPrice, setLifeTimeProductPrice] = useState('');
@@ -371,11 +374,12 @@ const InAppPurchase = ({navigation}) => {
   ];
 
   return (
-    <>
+    <SafeScreen backgroundColor={Colors.background || Colors.WHITE}>
       <View style={styles.container}>
         <FlatList
           data={itemList}
           keyExtractor={item => item.id}
+          contentContainerStyle={{paddingBottom: 16, flexGrow: 1}}
           renderItem={({item}) => (
             <View style={styles.itemContent}>
               <View style={styles.itemText}>
@@ -400,7 +404,11 @@ const InAppPurchase = ({navigation}) => {
           )}
         />
       </View>
-      <View style={styles.bottomButtons}>
+      <View
+        style={[
+          styles.bottomButtons,
+          {paddingBottom: Math.max(insets.bottom, 16)},
+        ]}>
         <TouchableOpacity
           style={styles.lifetimeaccess}
           onPress={() => handleLifetimePurchase(lifetimeIds[0])}>
@@ -408,14 +416,12 @@ const InAppPurchase = ({navigation}) => {
             source={require('../../assects/star.png')}
             style={{height: 25, width: 25}}
           />
-          <Text style={[styles.buttonText, {paddingLeft: 15}]}>
+          <Text style={[styles.buttonText, {paddingLeft: 15, flex: 1}]}>
             Lifetime access{' '}
-            <Text
-              style={[styles.buttonText, {fontWeight: 'bold', paddingLeft: 5}]}>
-              {lifeTimeProductPrice}
+            <Text style={[styles.buttonText, {fontWeight: 'bold'}]}>
+              {lifeTimeProductPrice || '—'}
             </Text>
           </Text>
-          <Text></Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.monthlyaccess}
@@ -424,17 +430,15 @@ const InAppPurchase = ({navigation}) => {
             source={require('../../assects/trophy.png')}
             style={{height: 25, width: 25}}
           />
-          {/* <Text style={styles.buttonText}>Monthly access</Text> */}
-          <Text style={[styles.buttonText]}>
+          <Text style={[styles.buttonText, {flex: 1, paddingLeft: 10}]}>
             3 days free trial then{' '}
             <Text style={[styles.buttonText, {fontWeight: 'bold'}]}>
-              {subscriptionProductPrice}
+              {subscriptionProductPrice || '—'}
             </Text>
           </Text>
-          <Text></Text>
         </TouchableOpacity>
       </View>
-    </>
+    </SafeScreen>
   );
 };
 

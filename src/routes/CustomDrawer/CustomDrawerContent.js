@@ -1,4 +1,4 @@
-import React, {useState, useContext, useCallback, useEffect} from 'react';
+import React, {useState, useContext, useCallback, useEffect, useMemo} from 'react';
 import {
   View,
   Text,
@@ -23,8 +23,14 @@ import {likedNamesCollection, dislikedNamesCollection} from '../../firebase/fire
 import {getLikeDislikeCount} from '../../api';
 import {Storage} from '../../util';
 import DeviceInfo from 'react-native-device-info';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 const CustomDrawerContent = ({navigation}) => {
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(insets), [insets]);
   const {logoutUser} = useContext(AuthContext);
   const {
     locale: {locale},
@@ -46,8 +52,9 @@ const CustomDrawerContent = ({navigation}) => {
 
   const handleDrawerItemPress = screen => {
     setSelectedItem(screen);
-    navigation.navigate(screen);
-    console.log('selectedItem----------------->', selectedItem);
+    // Screens live inside the Home stack (AppStack), not as drawer routes.
+    navigation.navigate('Home', {screen});
+    navigation.closeDrawer?.();
   };
   // user not logined
   const closePopup = () => {
@@ -131,7 +138,9 @@ const CustomDrawerContent = ({navigation}) => {
   }, [userId]);
 
   return (
-    <>
+    <SafeAreaView
+      edges={['top', 'bottom', 'left']}
+      style={{flex: 1, backgroundColor: Colors.primary}}>
       <View style={styles.drawerHeader}>
         <View
           style={{
@@ -144,7 +153,11 @@ const CustomDrawerContent = ({navigation}) => {
           {!isPrime ? (
             <TouchableOpacity
               style={styles.drawerTopUnlockFeatureBtn}
-              onPress={() => navigation.navigate('InAppPurchase')}>
+              onPress={() => {
+                setSelectedItem('InAppPurchase');
+                navigation.navigate('Home', {screen: 'InAppPurchase'});
+                navigation.closeDrawer?.();
+              }}>
               <Icon name="lock" size={15} color={Colors.WHITE} />
               <Text style={{color: Colors.WHITE, marginLeft: 5, fontSize: 12}}>
                 Unlock features
@@ -166,7 +179,8 @@ const CustomDrawerContent = ({navigation}) => {
                   compoundLetter: false,
                 });
               }
-              navigation.navigate('MainSearchScreen');
+              navigation.navigate('Home', {screen: 'MainSearchScreen'});
+              navigation.closeDrawer?.();
             }}
             style={styles.drawerTopIcons}>
             <Icon name="search" size={30} color={Colors.WHITE} />
@@ -243,7 +257,8 @@ const CustomDrawerContent = ({navigation}) => {
             <TouchableOpacity
               style={styles.dislikeButton}
               onPress={() => {
-                navigation.navigate('DisLikeList');
+                navigation.navigate('Home', {screen: 'DisLikeList'});
+                navigation.closeDrawer?.();
               }}>
               <AntDesign name="dislike2" size={20} color={Colors.WHITE} />
               <Text style={styles.LikeDisLikecount}>{dislikeCount ?? 0}</Text>
@@ -251,7 +266,8 @@ const CustomDrawerContent = ({navigation}) => {
             <TouchableOpacity
               style={styles.likeButton}
               onPress={() => {
-                navigation.navigate('LikeList');
+                navigation.navigate('Home', {screen: 'LikeList'});
+                navigation.closeDrawer?.();
               }}>
               <AntDesign name="like2" size={20} color={Colors.WHITE} />
 
@@ -467,11 +483,12 @@ const CustomDrawerContent = ({navigation}) => {
           </View> */}
         {/* </ImageBackground> */}
       </View>
-    </>
+    </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = insets =>
+  StyleSheet.create({
   container: {
     flexGrow: 1, // Allow the content to expand to fill available space
     backgroundColor: Colors.WHITE,
@@ -568,7 +585,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     position: 'absolute',
-    bottom: 80,
+    bottom: 80 + insets.bottom,
     left: 16,
   },
   logoutButtonText: {
@@ -586,7 +603,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     position: 'absolute',
-    bottom: 10,
+    bottom: 10 + insets.bottom,
   },
   followContainer: {
     alignItems: 'center',
