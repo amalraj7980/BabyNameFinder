@@ -227,12 +227,13 @@
 import React, {useEffect, useState} from 'react';
 import {Button, Text, View, TouchableOpacity} from 'react-native';
 import Voice from '@react-native-voice/voice';
-import useVoiceRecorder from '../../hooks/VoiceRecorder';
+import {Colors} from '../../styles';
+import SafeScreen from '../../components/SafeScreen';
 
 const AiAssistant = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const {startRecording, stopRecording} = useVoiceRecorder();
+  // audio-recorder-player removed in RN 0.83 upgrade; Voice handles speech input.
   useEffect(() => {
     // Set up event listeners for voice recognition
     Voice.onSpeechStart = onSpeechStart;
@@ -303,19 +304,21 @@ const AiAssistant = () => {
   };
 
   return (
-    <View>
-      <Text>AiAssistant</Text>
-      <Button
-        title={isRecording ? 'Stop Recording' : 'Start Recording'}
-        onPress={isRecording ? stopRecord : startRecord}
-      />
+    <SafeScreen backgroundColor={Colors.background || Colors.WHITE}>
+      <View>
+        <Text>AiAssistant</Text>
+        <Button
+          title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          onPress={isRecording ? stopRecord : startRecord}
+        />
 
-      <Text>Recognized Text: {recognizedText}</Text>
+        <Text>Recognized Text: {recognizedText}</Text>
 
-      <TouchableOpacity onPressIn={startRecording} onPressOut={stopRecording}>
-        <Text style={{color: 'red'}}>START RC</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPressIn={startRecord} onPressOut={stopRecord}>
+          <Text style={{color: 'red'}}>START RC</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeScreen>
   );
 };
 

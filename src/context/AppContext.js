@@ -1,4 +1,11 @@
-import React, {createContext, useEffect, useState, useRef} from 'react';
+import React, {
+  createContext,
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
 import {I18nManager, AppState} from 'react-native';
 import RNRestart from 'react-native-restart';
 import Storage from '../util/Storage'; // Use 'storage' instead of 'Storage'
@@ -318,7 +325,7 @@ export const AppContextProvider = ({children}) => {
   }, []);
 
   /*This function is used to change owner language*/
-  const changeLocale = async lan => {
+  const changeLocale = useCallback(async lan => {
     let _locale = LOCALES.find(item => item?.lan === lan);
     await Storage.setLocale({
       lan: _locale?.lan,
@@ -327,38 +334,57 @@ export const AppContextProvider = ({children}) => {
     });
     setLocale(_locale);
     languageRestart(_locale?.rtl ?? LOCALES[0].rtl);
-  };
+  }, []);
 
-  const value = {
-    locale,
-    languages,
-    countryCode,
-    changeLocale,
-    seachfilterDataWholeNames, // Include filter data in the context(WholeName)
-    setSeachfilterDataWholeNames, // Function to update filter data
-    seachfilterData, //Home filter
-    setSeachfilterData, ////Home filter
-    mainSeachfilterData, //drawer search
-    setMainSeachfilterData, //drawer search
-    likeCount,
-    dislikeCount,
-    setLikeCount,
-    setDislikeCount,
-    isPrime,
-    setIsPrime,
-    setIsUndoEnabled,
-    isUndoEnabled,
-    dislikeFilterScreen,
-    setDislikeFilterScreen,
-    likeFilterScreen,
-    setLikeFilterScreen,
-    swipeBlocked,
-    setSwipeBlocked,
-    deviceId,
-    setDeviceId,
-    babyNamesCount,
-    setBabyNamesCount,
-    // ... other context values ...
-  };
+  const value = useMemo(
+    () => ({
+      locale,
+      languages,
+      countryCode,
+      changeLocale,
+      seachfilterDataWholeNames,
+      setSeachfilterDataWholeNames,
+      seachfilterData,
+      setSeachfilterData,
+      mainSeachfilterData,
+      setMainSeachfilterData,
+      likeCount,
+      dislikeCount,
+      setLikeCount,
+      setDislikeCount,
+      isPrime,
+      setIsPrime,
+      setIsUndoEnabled,
+      isUndoEnabled,
+      dislikeFilterScreen,
+      setDislikeFilterScreen,
+      likeFilterScreen,
+      setLikeFilterScreen,
+      swipeBlocked,
+      setSwipeBlocked,
+      deviceId,
+      setDeviceId,
+      babyNamesCount,
+      setBabyNamesCount,
+    }),
+    [
+      locale,
+      languages,
+      countryCode,
+      seachfilterDataWholeNames,
+      seachfilterData,
+      mainSeachfilterData,
+      likeCount,
+      dislikeCount,
+      isPrime,
+      isUndoEnabled,
+      dislikeFilterScreen,
+      likeFilterScreen,
+      swipeBlocked,
+      deviceId,
+      babyNamesCount,
+      changeLocale,
+    ],
+  );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };

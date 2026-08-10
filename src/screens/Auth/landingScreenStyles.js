@@ -1,5 +1,7 @@
-import {StyleSheet} from 'react-native';
+import {StyleSheet, Dimensions} from 'react-native';
 import {Colors, Fonts} from '../../styles';
+
+const {height: SCREEN_HEIGHT} = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
   container: {
@@ -10,7 +12,7 @@ export const styles = StyleSheet.create({
   customPagination: {
     flexDirection: 'row',
     position: 'absolute',
-    bottom: 10,
+    bottom: 34,
     alignSelf: 'center',
   },
   activeDot: {
@@ -28,7 +30,9 @@ export const styles = StyleSheet.create({
     marginHorizontal: 3,
   },
 
-  wrapper: {},
+  wrapper: {
+    flex: 1,
+  },
   pagination: {
     bottom: 10, // Adjust this value as needed
   },
@@ -54,7 +58,7 @@ export const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 50,
     width: '80%',
-    height: 350,
+    height: Math.min(350, SCREEN_HEIGHT * 0.38),
     resizeMode: 'center',
   },
 

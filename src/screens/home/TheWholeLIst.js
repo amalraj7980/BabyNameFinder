@@ -22,6 +22,8 @@ import Foundation from 'react-native-vector-icons/Foundation';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Toast from 'react-native-toast-message';
 import {styles} from './theWholeLIstStyles';
+import SafeScreen from '../../components/SafeScreen';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 
 const getCardBackgroundColor = gender => {
@@ -36,6 +38,7 @@ const getCardBackgroundColor = gender => {
 };
 
 const TheWholeLIst = ({navigation, route}) => {
+  const insets = useSafeAreaInsets();
   const {
     locale: {locale},
     seachfilterDataWholeNames, // Access filterData from AppContext
@@ -236,36 +239,38 @@ const TheWholeLIst = ({navigation, route}) => {
   };
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={babyNamesData}
-        keyExtractor={item => `${item.id}_${Math.random()}`} // Use a random value to ensure uniqueness
-        renderItem={renderGridItem}
-        showsVerticalScrollIndicator={false} // Remove the scroll bar line
-        onEndReached={() => {
-          // Load more data when the end of the list is reached
-          fetchBabyNamesData(page + 1); // Pass the next page number
-          setPage(prevPage => prevPage + 1);
-        }}
-        onEndReachedThreshold={0.5} //Adjust this threshold as needed
-        ListEmptyComponent={renderNoMoreCardsText()} // Render when the list is empty
-      />
-      {isLoading && (
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-      )}
-      <Toast ref={ref => Toast.setRef(ref)} />
-      <CustomPopup
-        isVisible={isPopupVisible}
-        onClose={closePopup}
-        message={locale.notloginedMessage}
-        title={locale.notLoginedTitle}
-        onCancel={handleCancelPress} // Optional cancel button action
-        cancelText="Cancel" // Optional cancel button text
-        style={{width: '80%'}}
-      />
-    </View>
+    <SafeScreen backgroundColor={Colors.background || Colors.WHITE}>
+      <View style={styles.container}>
+        <FlatList
+          data={babyNamesData}
+          keyExtractor={item => `${item.id}_${Math.random()}`} // Use a random value to ensure uniqueness
+          renderItem={renderGridItem}
+          showsVerticalScrollIndicator={false} // Remove the scroll bar line
+          contentContainerStyle={{paddingBottom: insets.bottom + 24}}
+          onEndReached={() => {
+            // Load more data when the end of the list is reached
+            fetchBabyNamesData(page + 1); // Pass the next page number
+            setPage(prevPage => prevPage + 1);
+          }}
+          onEndReachedThreshold={0.5} //Adjust this threshold as needed
+          ListEmptyComponent={renderNoMoreCardsText()} // Render when the list is empty
+        />
+        {isLoading && (
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        )}
+        <CustomPopup
+          isVisible={isPopupVisible}
+          onClose={closePopup}
+          message={locale.notloginedMessage}
+          title={locale.notLoginedTitle}
+          onCancel={handleCancelPress} // Optional cancel button action
+          cancelText="Cancel" // Optional cancel button text
+          style={{width: '80%'}}
+        />
+      </View>
+    </SafeScreen>
   );
 };
 

@@ -4,7 +4,8 @@ import {Colors} from '../../styles';
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   loaderContainer: {
     ...StyleSheet.absoluteFillObject, // Cover the entire screen

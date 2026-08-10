@@ -63,6 +63,7 @@ const RouteStack = () => {
         <SplashScreen />
       ) : (
         <Drawer.Navigator
+          screenOptions={{headerShown: false}}
           drawerContent={props => (
             <CustomDrawerContent {...props} contentContainerStyle={{flex: 1}} />
           )}>
@@ -74,7 +75,7 @@ const RouteStack = () => {
           ) : (
             <Drawer.Screen
               name="LandingScreen"
-              options={{gestureEnabled: false}}>
+              options={{swipeEnabled: false, headerShown: false}}>
               {props => <LandingScreen {...props} handleStart={handleStart} />}
             </Drawer.Screen>
           )}
@@ -136,6 +137,7 @@ const ThemedNavigation = () => {
       <StatusBar
         barStyle={colors.statusBarStyle || 'dark-content'}
         backgroundColor={colors.headerBg || colors.primary}
+        translucent={false}
       />
       <NavigationContainer
         ref={navigationRef}

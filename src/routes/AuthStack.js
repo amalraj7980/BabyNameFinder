@@ -38,11 +38,17 @@ const AuthStack = ({navigation}) => {
       initialRouteName="SignIn"
       screenOptions={{
         headerStyle: {
-          backgroundColor: Colors.primary,
+          backgroundColor: Colors.headerBg || Colors.primary,
+          elevation: 0,
+          shadowOpacity: 0,
         },
         headerTintColor: Colors.WHITE,
         headerTitleStyle: {
           fontSize: 18,
+        },
+        headerTitleAlign: 'left',
+        contentStyle: {
+          backgroundColor: Colors.primary,
         },
       }}>
       <Stack.Screen

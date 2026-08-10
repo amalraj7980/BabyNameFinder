@@ -54,7 +54,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'column',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingBottom: 0,
   },
   lifetimeaccess: {
     backgroundColor: Colors.unisex,

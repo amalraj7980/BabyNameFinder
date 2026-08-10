@@ -8,6 +8,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DeviceInfo from 'react-native-device-info';
 
@@ -16,8 +17,10 @@ import {useTheme} from '../../theme';
 import {rateAppFromSettings} from '../../services/rating/ratingService';
 import {APP_DISPLAY_NAME, APP_VERSION} from '../../constants/appInfo';
 import {AppContext} from '../../context/AppContext';
+import SafeScreen from '../../components/SafeScreen';
 
 const SettingsScreen = ({navigation}) => {
+  const insets = useSafeAreaInsets();
   const {colors, isDark, setDarkModeEnabled} = useTheme();
   const {
     locale: {locale},
@@ -32,17 +35,29 @@ const SettingsScreen = ({navigation}) => {
   })();
 
   return (
-    <View style={[styles.root, {backgroundColor: colors.background}]}>
+    <SafeScreen backgroundColor={colors.background}>
       <StatusBar
         barStyle={colors.statusBarStyle || 'dark-content'}
         backgroundColor={colors.headerBg || colors.primary}
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          {paddingBottom: Math.max(insets.bottom, 24) + 16},
+        ]}
+        showsVerticalScrollIndicator={false}>
         <Text style={[styles.groupTitle, {color: colors.tintGray}]}>
           Preferences
         </Text>
 
-        <View style={[styles.card, {backgroundColor: colors.card || colors.WHITE, borderColor: colors.border || colors.lightGray}]}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card || colors.WHITE,
+              borderColor: colors.border || colors.lightGray,
+            },
+          ]}>
           <View style={styles.row}>
             <View style={styles.rowLeft}>
               <Icon name="brightness-2" size={22} color={colors.primary} />
@@ -68,7 +83,14 @@ const SettingsScreen = ({navigation}) => {
           Support
         </Text>
 
-        <View style={[styles.card, {backgroundColor: colors.card || colors.WHITE, borderColor: colors.border || colors.lightGray}]}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card || colors.WHITE,
+              borderColor: colors.border || colors.lightGray,
+            },
+          ]}>
           <TouchableOpacity
             style={styles.row}
             onPress={() => {
@@ -90,13 +112,38 @@ const SettingsScreen = ({navigation}) => {
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity
+          style={[
+            styles.card,
+            styles.proRow,
+            {
+              backgroundColor: colors.card || colors.WHITE,
+              borderColor: colors.border || colors.lightGray,
+            },
+          ]}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('InAppPurchase')}>
+          <View style={styles.rowLeft}>
+            <Icon name="star" size={22} color={colors.primary} />
+            <View style={styles.rowText}>
+              <Text style={[styles.rowLabel, {color: colors.textGray}]}>
+                PRO Version
+              </Text>
+              <Text style={[styles.rowDesc, {color: colors.textLight}]}>
+                Unlock AI assistant and premium features
+              </Text>
+            </View>
+          </View>
+          <Icon name="chevron-right" size={22} color={colors.tintGray} />
+        </TouchableOpacity>
+
         <Text style={[styles.footer, {color: colors.textLighter}]}>
           {APP_DISPLAY_NAME}
           {' · '}v{versionLabel}
           {locale?.settingsHint ? `\n${locale.settingsHint}` : ''}
         </Text>
       </ScrollView>
-    </View>
+    </SafeScreen>
   );
 };
 
@@ -118,6 +165,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     overflow: 'hidden',
   },
+  proRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -125,7 +179,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
-  rowLeft: {flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 12},
+  rowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 12,
+  },
   rowText: {marginLeft: 12, flex: 1},
   rowLabel: {fontSize: 16, fontWeight: '600', fontFamily: Fonts?.semibold},
   rowDesc: {fontSize: 12, marginTop: 2, lineHeight: 16},
