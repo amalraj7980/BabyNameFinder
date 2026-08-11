@@ -1,5 +1,5 @@
 import React from 'react';
-import {Image, Pressable, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Pressable, Text, View} from 'react-native';
 import {authStyles} from './authStyles';
 
 const GOOGLE_ICON = require('../../assects/google.png');
@@ -10,8 +10,11 @@ const AuthSocialFooter = ({
   onPress,
   onGooglePress,
   googleDisabled = false,
+  googleLoading = false,
   showDivider = true,
 }) => {
+  const disabled = googleDisabled || googleLoading;
+
   return (
     <View>
       {showDivider ? (
@@ -24,21 +27,44 @@ const AuthSocialFooter = ({
 
       <Pressable
         onPress={onGooglePress}
-        disabled={googleDisabled}
+        disabled={disabled}
         style={[
           authStyles.googleButton,
-          googleDisabled ? authStyles.googleButtonDisabled : null,
+          disabled ? authStyles.googleButtonDisabled : null,
+          googleLoading ? authStyles.googleButtonLoading : null,
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Continue with Google">
-        <Image source={GOOGLE_ICON} style={authStyles.googleIcon} resizeMode="contain" />
-        <Text style={authStyles.googleButtonText}>Continue with Google</Text>
+        accessibilityState={{disabled, busy: googleLoading}}
+        accessibilityLabel={
+          googleLoading ? 'Signing in with Google' : 'Continue with Google'
+        }>
+        {googleLoading ? (
+          <>
+            <ActivityIndicator size="small" color="#FF6B6B" />
+            <Text style={authStyles.googleButtonText}>Signing in…</Text>
+          </>
+        ) : (
+          <>
+            <Image
+              source={GOOGLE_ICON}
+              style={authStyles.googleIcon}
+              resizeMode="contain"
+            />
+            <Text style={authStyles.googleButtonText}>Continue with Google</Text>
+          </>
+        )}
       </Pressable>
 
       <View style={authStyles.footerPromptRow}>
         <Text style={authStyles.footerText}>{message} </Text>
-        <Pressable onPress={onPress} hitSlop={8}>
-          <Text style={authStyles.footerLink}>{actionLabel}</Text>
+        <Pressable onPress={onPress} hitSlop={8} disabled={googleLoading}>
+          <Text
+            style={[
+              authStyles.footerLink,
+              googleLoading ? authStyles.footerLinkDisabled : null,
+            ]}>
+            {actionLabel}
+          </Text>
         </Pressable>
       </View>
     </View>

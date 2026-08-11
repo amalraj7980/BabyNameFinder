@@ -70,7 +70,10 @@ export const resolveReactionUserId = userId => {
 
 export const mapNameDoc = docSnap => {
   const data = docSnap.data() || {};
-  const id = String(data.id ?? docSnap.id);
+  // Prefer non-empty business id; empty string in Firestore must not win over doc id
+  const id = String(
+    data.id || data.slug || docSnap.id || data.name || '',
+  ).trim();
   const syllableCountRaw = data.syllableCount;
   const syllableCount =
     typeof syllableCountRaw === 'number' && syllableCountRaw > 0

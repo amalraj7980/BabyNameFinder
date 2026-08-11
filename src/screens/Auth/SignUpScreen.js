@@ -13,6 +13,7 @@ import AppInput from '../../components/AppInput';
 import {validateRegisterForm} from '../../utils/authValidation';
 import AuthScreenLayout from './AuthScreenLayout';
 import AuthSocialFooter from './AuthSocialFooter';
+import AuthGoogleLoadingOverlay from './AuthGoogleLoadingOverlay';
 import {authStyles} from './authStyles';
 
 const SignUpScreen = ({navigation}) => {
@@ -140,7 +141,8 @@ const SignUpScreen = ({navigation}) => {
       showBack
       onBack={() => navigation.goBack()}
       heroTitle="Create account"
-      heroSubtitle="Save favorites and invite your partner.">
+      heroSubtitle="Save favorites and invite your partner."
+      overlay={<AuthGoogleLoadingOverlay visible={googleLoading} />}>
       <AppInput
         label="Full name"
         leftIcon="person"
@@ -151,6 +153,7 @@ const SignUpScreen = ({navigation}) => {
         returnKeyType="next"
         blurOnSubmit={false}
         onSubmitEditing={() => emailRef.current?.focus?.()}
+        editable={!busy}
       />
 
       <AppInput
@@ -165,6 +168,7 @@ const SignUpScreen = ({navigation}) => {
         returnKeyType="next"
         blurOnSubmit={false}
         onSubmitEditing={() => passwordRef.current?.focus?.()}
+        editable={!busy}
       />
 
       <AppInput
@@ -179,6 +183,7 @@ const SignUpScreen = ({navigation}) => {
         returnKeyType="next"
         blurOnSubmit={false}
         onSubmitEditing={() => confirmRef.current?.focus?.()}
+        editable={!busy}
       />
 
       <AppInput
@@ -195,6 +200,7 @@ const SignUpScreen = ({navigation}) => {
         returnKeyType="done"
         onSubmitEditing={signupHandler}
         error={fieldError || authError}
+        editable={!busy}
       />
 
       <Pressable
@@ -219,6 +225,7 @@ const SignUpScreen = ({navigation}) => {
         onPress={() => navigation.navigate('SignIn')}
         onGooglePress={handleGoogleSignIn}
         googleDisabled={busy}
+        googleLoading={googleLoading}
       />
 
       <Text style={authStyles.legalText}>

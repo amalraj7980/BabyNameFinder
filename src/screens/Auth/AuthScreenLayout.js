@@ -34,6 +34,7 @@ const AuthScreenLayout = ({
   footer,
   showBrand = true,
   compact = false,
+  overlay = null,
 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
@@ -181,6 +182,7 @@ const AuthScreenLayout = ({
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      {overlay}
     </View>
   );
 };

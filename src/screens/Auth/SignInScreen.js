@@ -11,6 +11,7 @@ import {Flash} from '../../util';
 import AppInput from '../../components/AppInput';
 import AuthScreenLayout from './AuthScreenLayout';
 import AuthSocialFooter from './AuthSocialFooter';
+import AuthGoogleLoadingOverlay from './AuthGoogleLoadingOverlay';
 import {authStyles} from './authStyles';
 
 const SignInScreen = ({navigation}) => {
@@ -142,7 +143,8 @@ const SignInScreen = ({navigation}) => {
         navigation.getParent()?.goBack();
       }}
       heroTitle={locale?.bT_login || 'Welcome back'}
-      heroSubtitle="Sign in to sync favorites.">
+      heroSubtitle="Sign in to sync favorites."
+      overlay={<AuthGoogleLoadingOverlay visible={googleLoading} />}>
       <AppInput
         label={locale?.placeholder?.email || 'Email'}
         leftIcon="mail"
@@ -158,6 +160,7 @@ const SignInScreen = ({navigation}) => {
         error={emailError}
         containerStyle={authStyles.inputCompact}
         inputWrapperStyle={{minHeight: 46}}
+        editable={!busy}
       />
 
       <AppInput
@@ -174,12 +177,14 @@ const SignInScreen = ({navigation}) => {
         error={passwordError || authError}
         containerStyle={authStyles.inputCompact}
         inputWrapperStyle={{minHeight: 46}}
+        editable={!busy}
       />
 
       <Pressable
         style={authStyles.forgotLinkRow}
         onPress={() => navigation.navigate('ForgotPassword')}
-        hitSlop={8}>
+        hitSlop={8}
+        disabled={busy}>
         <Text style={authStyles.forgotLink}>
           {locale?.forgotPassword || 'Forgot password?'}
         </Text>
@@ -202,11 +207,15 @@ const SignInScreen = ({navigation}) => {
       </Pressable>
 
       <AuthSocialFooter
-        message={locale?.dontHaveAnAccount?.split('?')?.[0] || "Don't have an account?"}
+        message={
+          locale?.dontHaveAnAccount?.split('?')?.[0] ||
+          "Don't have an account?"
+        }
         actionLabel="Sign up"
         onPress={() => navigation.navigate('SignUp')}
         onGooglePress={handleGoogleSignIn}
         googleDisabled={busy}
+        googleLoading={googleLoading}
       />
     </AuthScreenLayout>
   );

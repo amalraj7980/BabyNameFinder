@@ -109,7 +109,28 @@ const GenderBadge = ({gender}) => {
   );
 };
 
-const swiperKeyExtractor = item => String(item?.id ?? '');
+const normalizeDeckCards = (names = []) => {
+  const seen = new Set();
+  return (Array.isArray(names) ? names : [])
+    .filter(item => item && (item.id || item.slug || item.name))
+    .map((item, index) => {
+      const base =
+        String(item.id || item.slug || item.name || `name-${index}`).trim() ||
+        `name-${index}`;
+      let uniqueId = base;
+      let dup = 1;
+      while (seen.has(uniqueId)) {
+        uniqueId = `${base}__${dup++}`;
+      }
+      seen.add(uniqueId);
+      return {
+        ...item,
+        id: uniqueId,
+        key: uniqueId,
+        _deckIndex: index,
+      };
+    });
+};
 
 const OVERLAY_LABELS = {
   left: {
@@ -167,6 +188,7 @@ const DiscoverScreen = ({navigation}) => {
   // insets.top used for status-area padding on root
   const {
     seachfilterData,
+    setSeachfilterData,
     setIsUndoEnabled,
     isUndoEnabled,
     babyNamesCount,
@@ -229,8 +251,9 @@ const DiscoverScreen = ({navigation}) => {
 
   const replaceDeck = useCallback(
     (names, count) => {
-      setBabyNamesData(names || []);
-      setBabyNamesCount(count ?? 0);
+      const deck = normalizeDeckCards(names || []);
+      setBabyNamesData(deck);
+      setBabyNamesCount(count ?? deck.length);
       setCardIndex(0);
       cardIndexRef.current = 0;
       setSwipedCards([]);
@@ -255,6 +278,7 @@ const DiscoverScreen = ({navigation}) => {
         compoundName: seachfilterData?.compoundLetter ?? false,
         gender: seachfilterData?.gender ?? 'all',
         contains: seachfilterData?.contains ?? '',
+        origins: seachfilterData?.origins ?? [],
       };
 
       try {
@@ -563,12 +587,12 @@ const DiscoverScreen = ({navigation}) => {
     [openNameDetails, onShareName, isSimple, cardHeight],
   );
 
-  const modeLabel = partnerLinked ? 'with partner' : 'solo mode';
   const headerName = resolveDisplayName({
     localName,
     authDisplayName,
     isUserLoggedin,
   });
+  const headerTitle = isUserLoggedin ? headerName : 'Guest user';
   const remainingCount =
     typeof babyNamesCount === 'number'
       ? Math.max(0, babyNamesCount)
@@ -576,6 +600,27 @@ const DiscoverScreen = ({navigation}) => {
   const countLabel =
     remainingCount === 1 ? 'name left to discover' : 'names left to discover';
   const countDisplay = remainingCount.toLocaleString('en-US');
+  const hasActiveFilters = Boolean(
+    (seachfilterData?.firstLetter || '').trim() ||
+      (seachfilterData?.lastLetter || '').trim() ||
+      (seachfilterData?.contains || '').trim() ||
+      seachfilterData?.compoundLetter ||
+      (seachfilterData?.gender && seachfilterData.gender !== 'all') ||
+      (Array.isArray(seachfilterData?.origins) &&
+        seachfilterData.origins.length > 0),
+  );
+  const clearFilters = useCallback(() => {
+    setSeachfilterData(prev => ({
+      ...prev,
+      firstLetter: '',
+      lastLetter: '',
+      contains: '',
+      compoundLetter: false,
+      gender: 'all',
+      origins: [],
+      search: false,
+    }));
+  }, [setSeachfilterData]);
   const deckExhausted =
     babyNamesData.length === 0 || cardIndex >= babyNamesData.length;
 
@@ -593,7 +638,7 @@ const DiscoverScreen = ({navigation}) => {
       <View style={styles.header}>
         <BrandMark size={36} />
         <Text style={styles.headerMode} numberOfLines={1}>
-          {headerName} ({modeLabel})
+          {headerTitle}
         </Text>
         <TouchableOpacity
           style={styles.filterBtn}
@@ -605,20 +650,38 @@ const DiscoverScreen = ({navigation}) => {
       </View>
 
       <View
-        style={styles.countBanner}
+        style={[styles.countBanner, hasActiveFilters && styles.countBannerFiltered]}
         accessibilityRole="text"
-        accessibilityLabel={`${remainingCount} ${countLabel}`}>
+        accessibilityLabel={`${remainingCount} ${countLabel}${
+          hasActiveFilters ? ', filters applied' : ''
+        }`}>
         <View style={styles.countGlow} />
         <View style={styles.countIconWrap}>
           <Ionicons name="sparkles" size={14} color={C.primary} />
         </View>
         <View style={styles.countTextCol}>
           <Text style={styles.countNumber}>{countDisplay}</Text>
-          <Text style={styles.countCaption}>{countLabel}</Text>
+          <Text style={styles.countCaption}>
+            {hasActiveFilters ? 'filtered · ' : ''}
+            {countLabel}
+          </Text>
         </View>
-        <View style={styles.countPill}>
-          <Text style={styles.countPillText}>Live</Text>
-        </View>
+        {hasActiveFilters ? (
+          <TouchableOpacity
+            style={styles.clearFilterBtn}
+            onPress={clearFilters}
+            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Reset filters">
+            <Ionicons name="refresh" size={11} color="#FFFFFF" />
+            <Text style={styles.clearFilterText}>Reset</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.countPill}>
+            <Text style={styles.countPillText}>Live</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.deckArea}>
@@ -647,7 +710,11 @@ const DiscoverScreen = ({navigation}) => {
           />
 
           <View style={[styles.swiperWrap, {height: cardHeight}]}>
-            {deckExhausted && !isLoading ? (
+            {isLoading && !hasLoadedOnce ? (
+              <View style={styles.empty}>
+                <ActivityIndicator size="large" color={C.primary} />
+              </View>
+            ) : deckExhausted ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>No more names</Text>
                 <Text style={styles.emptySub}>
@@ -659,13 +726,12 @@ const DiscoverScreen = ({navigation}) => {
                 key={`swiper-${cardStyle}-${deckEpoch}`}
                 ref={swiperRef}
                 cards={babyNamesData}
-                keyExtractor={swiperKeyExtractor}
                 containerStyle={styles.swiperContainer}
                 cardStyle={{width: CARD_WIDTH, height: cardHeight}}
                 cardHorizontalMargin={CARD_H_MARGIN}
                 cardVerticalMargin={0}
                 backgroundColor="transparent"
-                stackSize={2}
+                stackSize={Math.min(2, babyNamesData.length)}
                 stackSeparation={10}
                 stackScale={4}
                 animateCardOpacity
@@ -828,7 +894,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 10,
     marginBottom: 2,
-    paddingHorizontal: 14,
+    paddingLeft: 14,
+    paddingRight: 8,
     paddingVertical: 10,
     borderRadius: 18,
     backgroundColor: C.surface,
@@ -847,6 +914,29 @@ const styles = StyleSheet.create({
       },
       android: {elevation: 3},
     }),
+  },
+  countBannerFiltered: {
+    borderColor: 'rgba(255,107,107,0.42)',
+  },
+  clearFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: C.primary,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    minHeight: 30,
+    marginLeft: 'auto',
+    marginRight: -4,
+  },
+  clearFilterText: {
+    fontFamily: Fonts.bold,
+    fontSize: 9,
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   countGlow: {
     position: 'absolute',
@@ -886,6 +976,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    marginLeft: 'auto',
   },
   countPillText: {
     fontFamily: Fonts.bold,

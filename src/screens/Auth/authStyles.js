@@ -240,6 +240,11 @@ export const authStyles = StyleSheet.create({
   googleButtonDisabled: {
     opacity: 0.6,
   },
+  googleButtonLoading: {
+    opacity: 1,
+    borderColor: 'rgba(255,107,107,0.35)',
+    backgroundColor: '#FFF8F6',
+  },
   googleButtonText: {
     color: C.textPrimary,
     fontFamily: Fonts.semibold,
@@ -265,6 +270,9 @@ export const authStyles = StyleSheet.create({
     color: C.primary,
     fontFamily: Fonts.bold,
     fontSize: 13,
+  },
+  footerLinkDisabled: {
+    opacity: 0.45,
   },
   legalText: {
     marginTop: 12,

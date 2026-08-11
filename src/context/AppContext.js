@@ -87,6 +87,7 @@ export const AppContextProvider = ({children}) => {
     gender: 'all',
     contains: '',
     compoundLetter: false,
+    origins: [],
     search: false,
   });
   const [isPrime, setIsPrime] = useState(false); // Initialize to false

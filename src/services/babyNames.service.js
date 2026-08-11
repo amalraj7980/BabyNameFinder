@@ -11,10 +11,30 @@ import {
   serverTimestamp,
 } from '../firebase/firestore';
 import BOOTSTRAP_NAMES from '../data/seedNames';
+import {resolveOriginMatchSet} from '../constants/countryOriginOptions';
 
 let cachedNames = null;
 let namesUnsubscribe = null;
 const nameListeners = new Set();
+
+const mapAndDedupeNames = docs => {
+  const mapped = docs.map(mapNameDoc);
+  const seen = new Set();
+  const unique = [];
+  mapped.forEach((item, index) => {
+    const base =
+      String(item?.id || item?.slug || item?.name || `name-${index}`).trim() ||
+      `name-${index}`;
+    let key = base;
+    let n = 1;
+    while (seen.has(key)) {
+      key = `${base}__${n++}`;
+    }
+    seen.add(key);
+    unique.push(key === item.id ? item : {...item, id: key, key});
+  });
+  return unique;
+};
 
 const normalizeGenderFilter = gender => {
   const g = (gender || 'all').toString().toLowerCase();
@@ -51,6 +71,42 @@ const applyFilters = (names, filters = {}) => {
   const gender = normalizeGenderFilter(filters.gender);
   const compoundName = filters.compoundName;
 
+  let originMatch = null;
+  if (Array.isArray(filters.origins) && filters.origins.length) {
+    originMatch = resolveOriginMatchSet(filters.origins);
+  } else if (filters.origin && filters.origin !== 'all') {
+    originMatch = resolveOriginMatchSet([filters.origin]);
+  }
+
+  const originMatches = itemOriginRaw => {
+    if (!originMatch || !originMatch.size) {
+      return true;
+    }
+    const itemOrigin = String(
+      typeof itemOriginRaw === 'string'
+        ? itemOriginRaw
+        : itemOriginRaw?.name || '',
+    )
+      .toLowerCase()
+      .trim();
+    if (!itemOrigin) {
+      return false;
+    }
+    if (originMatch.has(itemOrigin)) {
+      return true;
+    }
+    const parts = itemOrigin.split(/[/&,]+/).map(p => p.trim()).filter(Boolean);
+    if (parts.some(p => originMatch.has(p))) {
+      return true;
+    }
+    for (const token of originMatch) {
+      if (token.length >= 3 && itemOrigin.includes(token)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   return names.filter(item => {
     const name = (item.name || '').toLowerCase();
     if (startWith && !name.startsWith(startWith)) {
@@ -79,6 +135,9 @@ const applyFilters = (names, filters = {}) => {
       if (!isCompound) {
         return false;
       }
+    }
+    if (!originMatches(item.origin)) {
+      return false;
     }
     return true;
   });
@@ -188,7 +247,7 @@ export const startBabyNamesLiveSync = () => {
   }
   namesUnsubscribe = babyNamesCollection().onSnapshot(
     snapshot => {
-      cachedNames = snapshot.docs.map(mapNameDoc);
+      cachedNames = mapAndDedupeNames(snapshot.docs);
       console.log(`baby_names live: ${cachedNames.length} names`);
       notifyListeners(cachedNames);
     },
@@ -216,7 +275,7 @@ export const fetchAllBabyNames = async ({forceRefresh = false} = {}) => {
   }
 
   const snap = await babyNamesCollection().get();
-  cachedNames = snap.docs.map(mapNameDoc);
+  cachedNames = mapAndDedupeNames(snap.docs);
   console.log(`baby_names fetched: ${cachedNames.length}`);
 
   if (cachedNames.length === 0) {

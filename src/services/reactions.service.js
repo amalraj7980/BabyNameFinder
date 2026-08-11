@@ -3,6 +3,7 @@
  * Legacy REST parity via api/index.js (likeUser, disLikeUser, getReactions, …)
  */
 import {fetchAllBabyNames} from './babyNames.service';
+import {resolveOriginMatchSet} from '../constants/countryOriginOptions';
 import {addLocalFavorite, removeLocalFavorite} from './localFavorites.service';
 import {
   addLocalDislike,
@@ -231,6 +232,13 @@ const applyListFilters = (names, filters = {}) => {
   const gender = normalizeGender(filters.gender);
   const compoundName = filters.compoundName;
 
+  let originMatch = null;
+  if (Array.isArray(filters.origins) && filters.origins.length) {
+    originMatch = resolveOriginMatchSet(filters.origins);
+  } else if (filters.origin && filters.origin !== 'all') {
+    originMatch = resolveOriginMatchSet([filters.origin]);
+  }
+
   return names.filter(item => {
     const name = (item.name || '').toLowerCase();
     if (startWith && !name.startsWith(startWith)) {
@@ -257,6 +265,33 @@ const applyListFilters = (names, filters = {}) => {
       if (!isCompound) {
         return false;
       }
+    }
+    if (originMatch && originMatch.size) {
+      const raw = item.origin;
+      const itemOrigin = String(
+        typeof raw === 'string' ? raw : raw?.name || '',
+      )
+        .toLowerCase()
+        .trim();
+      if (!itemOrigin) {
+        return false;
+      }
+      if (originMatch.has(itemOrigin)) {
+        return true;
+      }
+      const parts = itemOrigin
+        .split(/[/&,]+/)
+        .map(p => p.trim())
+        .filter(Boolean);
+      if (parts.some(p => originMatch.has(p))) {
+        return true;
+      }
+      for (const token of originMatch) {
+        if (token.length >= 3 && itemOrigin.includes(token)) {
+          return true;
+        }
+      }
+      return false;
     }
     return true;
   });

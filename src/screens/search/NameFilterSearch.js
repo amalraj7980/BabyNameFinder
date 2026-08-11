@@ -18,6 +18,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {AppContext} from '../../context/AppContext';
 import {Fonts} from '../../styles';
 import {getTabBarStyle} from '../../routes/tabBarStyles';
+import {COUNTRY_ORIGIN_OPTIONS} from '../../constants/countryOriginOptions';
 
 const C = {
   bg: '#FFF8F2',
@@ -87,6 +88,7 @@ export default function NameFilterSearch({navigation}) {
     contains: '',
     compoundLetter: false,
     gender: 'all',
+    origins: [],
   });
 
   useFocusEffect(
@@ -110,11 +112,28 @@ export default function NameFilterSearch({navigation}) {
       contains: seachfilterData?.contains ?? '',
       compoundLetter: !!seachfilterData?.compoundLetter,
       gender: seachfilterData?.gender ?? 'all',
+      origins: Array.isArray(seachfilterData?.origins)
+        ? seachfilterData.origins
+        : [],
     });
   }, [seachfilterData]);
 
   const setField = useCallback((field, value) => {
     setDraft(prev => ({...prev, [field]: value}));
+  }, []);
+
+  const toggleOrigin = useCallback(value => {
+    if (value === 'all') {
+      setDraft(prev => ({...prev, origins: []}));
+      return;
+    }
+    setDraft(prev => {
+      const current = prev.origins || [];
+      const next = current.includes(value)
+        ? current.filter(v => v !== value)
+        : [...current, value];
+      return {...prev, origins: next};
+    });
   }, []);
 
   const handleApply = useCallback(() => {
@@ -126,6 +145,7 @@ export default function NameFilterSearch({navigation}) {
       contains: (draft.contains || '').trim(),
       compoundLetter: !!draft.compoundLetter,
       gender: draft.gender || 'all',
+      origins: Array.isArray(draft.origins) ? draft.origins : [],
       search: false,
     }));
     navigation.goBack();
@@ -138,6 +158,7 @@ export default function NameFilterSearch({navigation}) {
       contains: '',
       compoundLetter: false,
       gender: 'all',
+      origins: [],
     };
     setDraft(cleared);
     setSeachfilterData({
@@ -147,6 +168,7 @@ export default function NameFilterSearch({navigation}) {
   }, [setSeachfilterData]);
 
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12);
+  const allOriginsSelected = !(draft.origins && draft.origins.length);
 
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
@@ -248,6 +270,46 @@ export default function NameFilterSearch({navigation}) {
                           styles.genderChipText,
                           selected && styles.genderChipTextOn,
                           !selected && {color: opt.color},
+                        ]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+                Country / Origin
+              </Text>
+              <Text style={styles.sectionHint}>
+                Select one or more. Leave All to include every origin.
+              </Text>
+              <View style={styles.genderWrap}>
+                {COUNTRY_ORIGIN_OPTIONS.map(opt => {
+                  const selected =
+                    opt.value === 'all'
+                      ? allOriginsSelected
+                      : (draft.origins || []).includes(opt.value);
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.genderChip,
+                        selected && {
+                          backgroundColor: C.primary,
+                          borderColor: C.primary,
+                        },
+                      ]}
+                      onPress={() => toggleOrigin(opt.value)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{selected}}>
+                      <Text
+                        style={[
+                          styles.genderChipText,
+                          selected
+                            ? styles.genderChipTextOn
+                            : {color: C.text},
                         ]}>
                         {opt.label}
                       </Text>
@@ -395,6 +457,16 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontFamily: Fonts.medium,
     fontSize: 13,
+    color: C.muted,
+    marginBottom: 12,
+  },
+  sectionLabelSpaced: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  sectionHint: {
+    fontFamily: Fonts.regular,
+    fontSize: 11,
     color: C.muted,
     marginBottom: 12,
   },
