@@ -1,59 +1,67 @@
 /**
  * Thin Firestore path helpers — paths match published Console rules.
+ * Uses RN Firebase modular API (v22+) to avoid namespaced deprecation noise.
  */
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import {getApp} from '@react-native-firebase/app';
+import {getAuth} from '@react-native-firebase/auth';
+import {
+  getFirestore as getFirestoreModular,
+  collection,
+  doc,
+  serverTimestamp as firestoreServerTimestamp,
+} from '@react-native-firebase/firestore';
 import {
   FIRESTORE_COLLECTIONS,
   REACTION_SUBCOLLECTIONS,
 } from './config';
 
-export const getFirestore = () => firestore();
+export const getFirestore = () => getFirestoreModular(getApp());
 
-export const serverTimestamp = () => firestore.FieldValue.serverTimestamp();
+export const serverTimestamp = () => firestoreServerTimestamp();
 
 export const userDocument = uid =>
-  firestore().collection(FIRESTORE_COLLECTIONS.users).doc(uid);
+  doc(collection(getFirestore(), FIRESTORE_COLLECTIONS.users), uid);
 
 export const usernameDocument = usernameLower =>
-  firestore()
-    .collection(FIRESTORE_COLLECTIONS.usernames)
-    .doc(String(usernameLower).toLowerCase());
+  doc(
+    collection(getFirestore(), FIRESTORE_COLLECTIONS.usernames),
+    String(usernameLower).toLowerCase(),
+  );
 
 export const babyNamesCollection = () =>
-  firestore().collection(FIRESTORE_COLLECTIONS.babyNames);
+  collection(getFirestore(), FIRESTORE_COLLECTIONS.babyNames);
 
 export const babyNameDocument = nameId =>
-  babyNamesCollection().doc(String(nameId));
+  doc(babyNamesCollection(), String(nameId));
 
 export const metaDocument = (docId = 'global') =>
-  firestore().collection(FIRESTORE_COLLECTIONS.meta).doc(docId);
+  doc(collection(getFirestore(), FIRESTORE_COLLECTIONS.meta), docId);
 
 /** Remote version gate: collection `app_config`, document `version`. */
 export const appVersionConfigDocument = () =>
-  firestore().collection(FIRESTORE_COLLECTIONS.appConfig).doc('version');
+  doc(collection(getFirestore(), FIRESTORE_COLLECTIONS.appConfig), 'version');
 
 /** @deprecated use metaDocument — kept for call-site compatibility */
 export const statisticsDocument = (docId = 'global') => metaDocument(docId);
 
 export const reactionsUserDocument = uid =>
-  firestore().collection(FIRESTORE_COLLECTIONS.reactions).doc(uid);
+  doc(collection(getFirestore(), FIRESTORE_COLLECTIONS.reactions), uid);
 
 export const likedNamesCollection = uid =>
-  reactionsUserDocument(uid).collection(REACTION_SUBCOLLECTIONS.likes);
+  collection(reactionsUserDocument(uid), REACTION_SUBCOLLECTIONS.likes);
 
 export const dislikedNamesCollection = uid =>
-  reactionsUserDocument(uid).collection(REACTION_SUBCOLLECTIONS.dislikes);
+  collection(reactionsUserDocument(uid), REACTION_SUBCOLLECTIONS.dislikes);
 
 export const likedNameDocument = (uid, nameId) =>
-  likedNamesCollection(uid).doc(String(nameId));
+  doc(likedNamesCollection(uid), String(nameId));
 
 export const dislikedNameDocument = (uid, nameId) =>
-  dislikedNamesCollection(uid).doc(String(nameId));
+  doc(dislikedNamesCollection(uid), String(nameId));
 
 /** Prefer live Auth uid so reactions always persist dynamically */
 export const resolveReactionUserId = userId => {
-  const liveUid = auth().currentUser?.uid;
+  const liveUid = getAuth(getApp()).currentUser?.uid;
   if (liveUid) {
     return String(liveUid);
   }
