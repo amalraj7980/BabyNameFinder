@@ -20,6 +20,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
+import {applyAppStatusBar} from '../../components/AppStatusBar';
 
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
@@ -241,6 +242,7 @@ const DiscoverScreen = ({navigation}) => {
 
   useFocusEffect(
     useCallback(() => {
+      applyAppStatusBar('dark-content');
       void refreshProfile();
     }, [refreshProfile]),
   );

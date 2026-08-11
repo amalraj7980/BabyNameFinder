@@ -28,6 +28,7 @@ import {
   getDisplayName,
   isPartnerLinked,
 } from '../../services/onboardingStorage';
+import {applyAppStatusBar} from '../../components/AppStatusBar';
 import {
   getActivePartnerSession,
   subscribePartnerFavorites,
@@ -85,6 +86,7 @@ const MatchesScreen = ({navigation}) => {
 
   useFocusEffect(
     useCallback(() => {
+      applyAppStatusBar('dark-content');
       let unsubLocal = () => {};
       let unsubPartner = () => {};
       (async () => {

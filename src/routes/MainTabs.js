@@ -18,6 +18,7 @@ import InAppPurchase from '../screens/premium/InAppPurchase';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import PrivacyPolicy from '../screens/legal/PrivacyPolicy';
 import TermsOfService from '../screens/legal/TermsOfService';
+import AiAssistant from '../screens/home/AiAssistant';
 
 const Tab = createBottomTabNavigator();
 const DiscoverStackNav = createStackNavigator();
@@ -86,6 +87,11 @@ const PreferencesStack = () => (
       component={TermsOfService}
       options={{headerShown: true, title: 'Terms of Use'}}
     />
+    <PreferencesStackNav.Screen
+      name="AiAssistant"
+      component={AiAssistant}
+      options={{headerShown: false}}
+    />
   </PreferencesStackNav.Navigator>
 );
 
@@ -118,8 +124,8 @@ const MainTabs = () => {
           tabBarLabelStyle,
           tabBarIconStyle: styles.tabIcon,
           tabBarItemStyle: styles.tabItem,
-          tabBarIcon: ({focused, color, size}) =>
-            tabIcon(route.name, focused, color, Math.min(size, 24)),
+          tabBarIcon: ({focused, color}) =>
+            tabIcon(route.name, focused, color, 20),
         })}>
         <Tab.Screen name="Discover" component={DiscoverStack} />
         <Tab.Screen name="Matches" component={MatchesStack} />
@@ -132,9 +138,10 @@ const MainTabs = () => {
 const styles = StyleSheet.create({
   tabItem: {
     justifyContent: 'center',
+    paddingVertical: 0,
   },
   tabIcon: {
-    marginTop: 2,
+    marginTop: 0,
   },
 });
 

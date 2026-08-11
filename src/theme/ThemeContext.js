@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import {StatusBar} from 'react-native';
+import {StatusBar, Platform} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   DarkTheme as NavigationDarkTheme,
@@ -59,8 +59,17 @@ export const ThemeProvider = ({children}) => {
       return;
     }
     const palette = applyColors(mode);
-    StatusBar.setBarStyle(palette.statusBarStyle || 'dark-content');
-    StatusBar.setBackgroundColor(palette.headerBg || palette.primary);
+    // Discover cream theme — keep icons visible on Android 15+ (edge-to-edge)
+    StatusBar.setHidden(false);
+    StatusBar.setBarStyle(palette.statusBarStyle || 'dark-content', true);
+    if (Platform.OS === 'android') {
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent', true);
+    } else {
+      StatusBar.setBackgroundColor(
+        palette.background || palette.statusBarBg || '#FFF8F2',
+      );
+    }
   }, [mode, hydrated]);
 
   const setDarkModeEnabled = useCallback(async enabled => {

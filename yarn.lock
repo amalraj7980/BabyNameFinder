@@ -4180,6 +4180,7 @@ __metadata:
     react-native-iap: 12.16.4
     react-native-image-picker: ^8.2.1
     react-native-in-app-review: ^4.3.5
+    react-native-keyboard-controller: ^1.22.2
     react-native-linear-gradient: ^2.8.3
     react-native-pager-view: ^6.8.1
     react-native-paper: ^5.13.1
@@ -10220,6 +10221,19 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: dc82d54e0bf8f89208a538bb0d14e4891af6efae27ed5b7b21be683a72c38c5219ab9be1ea9bd40aa1c905d481174e649d0b71aeceaa9946e6c707f251568282
+  languageName: node
+  linkType: hard
+
+"react-native-keyboard-controller@npm:^1.22.2":
+  version: 1.22.3
+  resolution: "react-native-keyboard-controller@npm:1.22.3"
+  dependencies:
+    react-native-is-edge-to-edge: ^1.2.1
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+    react-native-reanimated: ">=3.0.0"
+  checksum: c1d9803ec414cea71693320256328f6023d46561f5ebdfdc036c8e599a97e256da9dfe5de8394fa5681cfffff1c9b4c51a6b1ced8bb67d4b312909f80ffc3fb0
   languageName: node
   linkType: hard
 

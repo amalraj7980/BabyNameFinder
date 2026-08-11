@@ -17,11 +17,13 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Share from 'react-native-share';
 import Toast from 'react-native-toast-message';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
+import {applyAppStatusBar} from '../../components/AppStatusBar';
 import {
   getDisplayName,
   setDisplayName,
@@ -73,6 +75,7 @@ const C = {
 const STYLE_OPTIONS = NAME_STYLE_OPTIONS;
 
 const ACCOUNT_ROWS = [
+  {key: 'aiAssistant', label: 'Baby Name AI', icon: 'sparkles', color: '#AF52DE'},
   {key: 'notifications', label: 'Notifications', icon: 'notifications', color: '#4C9AFF'},
   {key: 'privacy', label: 'Privacy', icon: 'lock-closed', color: '#34C759'},
   {key: 'terms', label: 'Terms of Use', icon: 'document-text', color: '#FFCC00'},
@@ -198,6 +201,13 @@ const PreferencesScreen = ({navigation}) => {
   useEffect(() => {
     loadPrefs();
   }, [loadPrefs, isUserLoggedin, authDisplayName, email]);
+
+  useFocusEffect(
+    useCallback(() => {
+      applyAppStatusBar('dark-content');
+      void loadPrefs();
+    }, [loadPrefs]),
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -390,6 +400,10 @@ const PreferencesScreen = ({navigation}) => {
             },
           ],
         );
+        return;
+      }
+      if (key === 'aiAssistant') {
+        navigation.navigate('AiAssistant');
         return;
       }
       if (key === 'privacy') {

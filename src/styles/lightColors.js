@@ -46,5 +46,6 @@ export default {
   surface: '#FFFFFF',
   border: '#E8EEF5',
   headerBg: '#FF6B6B',
+  statusBarBg: '#FFF8F2',
   statusBarStyle: 'dark-content',
 };

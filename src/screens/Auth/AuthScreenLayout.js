@@ -2,7 +2,6 @@ import React, {useEffect, useRef} from 'react';
 import {
   Animated,
   Easing,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -17,6 +16,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {DesignTokens} from '../../theme/designTokens';
+import KeyboardAvoiding from '../../components/KeyboardAvoiding';
 import {AUTH_BG, AUTH_BG_END, authStyles} from './authStyles';
 
 const APP_LOGO = require('../../assects/App Icon 1024x1024.png');
@@ -43,6 +43,10 @@ const AuthScreenLayout = ({
     React.useCallback(() => {
       StatusBar.setBarStyle('dark-content');
       if (Platform.OS === 'android') {
+        StatusBar.setHidden(false);
+        StatusBar.setTranslucent(true);
+        StatusBar.setBackgroundColor('transparent');
+      } else {
         StatusBar.setBackgroundColor(AUTH_BG);
       }
     }, []),
@@ -95,10 +99,7 @@ const AuthScreenLayout = ({
           </View>
         ) : null}
 
-        <KeyboardAvoidingView
-          style={authStyles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+        <KeyboardAvoiding style={authStyles.flex} extraOffset={8}>
           <ScrollView
             contentContainerStyle={[
               authStyles.scrollContent,
@@ -180,7 +181,7 @@ const AuthScreenLayout = ({
               {footer}
             </Animated.View>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAvoiding>
       </SafeAreaView>
       {overlay}
     </View>

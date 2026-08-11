@@ -54,6 +54,7 @@ project.xcworkspace
 .env
 .env.*
 !.env.example
+src/config/env.runtime.js
 google-services.json.bak
 GoogleService-Info.plist.bak
 

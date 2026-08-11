@@ -38,7 +38,9 @@ const SettingsScreen = ({navigation}) => {
     <SafeScreen backgroundColor={colors.background}>
       <StatusBar
         barStyle={colors.statusBarStyle || 'dark-content'}
-        backgroundColor={colors.headerBg || colors.primary}
+        backgroundColor={
+          colors.statusBarBg || colors.background || '#FFF8F2'
+        }
       />
       <ScrollView
         contentContainerStyle={[

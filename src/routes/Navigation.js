@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from 'react';
-import {AppState, StatusBar} from 'react-native';
+import {AppState} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 import {Storage} from '../util';
@@ -24,6 +24,7 @@ import OnboardingStack from './OnboardingStack';
 import MainTabs from './MainTabs';
 import AuthStack from './AuthStack';
 import {DesignTokens as T} from '../theme/designTokens';
+import AppStatusBar from '../components/AppStatusBar';
 
 const RootStack = createStackNavigator();
 const MIN_SPLASH_DURATION = 5000;
@@ -86,7 +87,7 @@ const RouteStack = () => {
 
 const ThemedNavigation = () => {
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
-  const {navigationTheme, colors, hydrated} = useTheme();
+  const {navigationTheme, hydrated} = useTheme();
   const {phase} = useAppUpdateStore();
 
   useEffect(() => {
@@ -146,10 +147,7 @@ const ThemedNavigation = () => {
 
   return (
     <>
-      <StatusBar
-        barStyle={colors.statusBarStyle || 'dark-content'}
-        backgroundColor={T.colors.background}
-      />
+      <AppStatusBar />
       <NavigationContainer
         ref={navigationRef}
         linking={linkingConfig}
