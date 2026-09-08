@@ -5,3 +5,8 @@ export const APP_VERSION = '2.1.0';
 /** Fallback when DeviceInfo is unavailable (before native rebuild). */
 export const APP_NATIVE_VERSION = '2.1';
 export const IOS_APP_STORE_ID = '';
+
+export const PRIVACY_POLICY_URL =
+  'https://amalraj7980.github.io/BabyNames-Privacy-Policy/index.html';
+export const TERMS_OF_USE_URL =
+  'https://amalraj7980.github.io/BabyNames-Privacy-Policy/index.html';

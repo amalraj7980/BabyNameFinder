@@ -15,6 +15,7 @@ import AuthScreenLayout from './AuthScreenLayout';
 import AuthSocialFooter from './AuthSocialFooter';
 import AuthGoogleLoadingOverlay from './AuthGoogleLoadingOverlay';
 import {authStyles} from './authStyles';
+import {PRIVACY_POLICY_URL, TERMS_OF_USE_URL} from '../../constants/appInfo';
 
 const SignUpScreen = ({navigation}) => {
   const {
@@ -40,11 +41,6 @@ const SignUpScreen = ({navigation}) => {
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
   const confirmRef = useRef(null);
-
-  const privacyPolicyUrl =
-    'https://riafy.me/wellness/privacy.php?appname=Baby%20Names%20App';
-  const TermsAndConditionsUrl =
-    'https://riafy.me/wellness/terms.php?apptitle=Baby%20Names%20App';
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -231,13 +227,13 @@ const SignUpScreen = ({navigation}) => {
       <Text style={authStyles.legalText}>
         {locale?.privacyPolicy || 'By continuing you agree to our '}
         <Text
-          onPress={() => Linking.openURL(TermsAndConditionsUrl)}
+          onPress={() => Linking.openURL(TERMS_OF_USE_URL)}
           style={authStyles.legalLink}>
           Terms of Service
         </Text>
         <Text> and </Text>
         <Text
-          onPress={() => Linking.openURL(privacyPolicyUrl)}
+          onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
           style={authStyles.legalLink}>
           Privacy Policy
         </Text>

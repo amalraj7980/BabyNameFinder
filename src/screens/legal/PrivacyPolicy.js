@@ -6,6 +6,7 @@ import {
 import {WebView} from 'react-native-webview';
 import {Colors} from '../../styles';
 import SafeScreen from '../../components/SafeScreen';
+import {PRIVACY_POLICY_URL} from '../../constants/appInfo';
 import {styles} from './privacyPolicyStyles';
 
 
@@ -25,7 +26,7 @@ const PrivacyPolicy = () => {
       <View style={styles.container}>
         <WebView
           source={{
-            uri: 'https://riafy.me/wellness/privacy.php?appname=Baby%20Names%20App',
+            uri: PRIVACY_POLICY_URL,
           }}
           onLoadStart={() => setIsLoading(true)}
           onLoad={() => setIsLoading(true)} 

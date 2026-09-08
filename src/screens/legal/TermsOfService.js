@@ -98,6 +98,7 @@ import {StyleSheet, View, ActivityIndicator, BackHandler} from 'react-native';
 import {WebView} from 'react-native-webview';
 import {Colors} from '../../styles';
 import SafeScreen from '../../components/SafeScreen';
+import {TERMS_OF_USE_URL} from '../../constants/appInfo';
 import {styles} from './termsOfServiceStyles';
 
 
@@ -140,7 +141,7 @@ const TermsOfService = () => {
         <WebView
           ref={webViewRef}
           source={{
-            uri: 'https://riafy.me/wellness/terms.php?apptitle=Baby%20Names%20App',
+            uri: TERMS_OF_USE_URL,
           }}
           onLoadStart={() => setIsLoading(true)}
           onLoad={() => setIsLoading(false)}

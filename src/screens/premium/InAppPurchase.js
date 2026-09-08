@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Linking,
   Platform,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -26,6 +27,7 @@ import {DesignTokens as T} from '../../theme/designTokens';
 import {AppContext} from '../../context/AppContext';
 import {Storage} from '../../util';
 import {getTabBarStyle} from '../../routes/tabBarStyles';
+import {PRIVACY_POLICY_URL, TERMS_OF_USE_URL} from '../../constants/appInfo';
 
 const LIFETIME_IDS = ['lifetime_iap_ios4'];
 
@@ -377,8 +379,19 @@ const InAppPurchase = ({navigation}) => {
         </TouchableOpacity>
 
         <Text style={styles.legal}>
-          By purchasing you agree to our Terms of Use and Privacy Policy.
-          Purchases are one-time and non-subscription.
+          By purchasing you agree to our{' '}
+          <Text
+            style={styles.legalLink}
+            onPress={() => Linking.openURL(TERMS_OF_USE_URL)}>
+            Terms of Use
+          </Text>
+          {' '}and{' '}
+          <Text
+            style={styles.legalLink}
+            onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+            Privacy Policy
+          </Text>
+          . Purchases are one-time and non-subscription.
         </Text>
       </ScrollView>
     </View>
@@ -576,6 +589,11 @@ const styles = StyleSheet.create({
     color: T.colors.textTertiary,
     paddingHorizontal: 12,
     marginBottom: 8,
+  },
+  legalLink: {
+    color: T.colors.textSecondary,
+    fontFamily: Fonts.semibold,
+    textDecorationLine: 'underline',
   },
 });
 
