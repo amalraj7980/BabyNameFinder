@@ -141,7 +141,7 @@ const SignUpScreen = ({navigation}) => {
       showBack
       onBack={() => navigation.goBack()}
       heroTitle="Create account"
-      heroSubtitle="Save favorites and invite your partner."
+      heroSubtitle="Save favorites and personalize your name discovery."
       overlay={<AuthGoogleLoadingOverlay visible={googleLoading} />}>
       <AppInput
         label="Full name"

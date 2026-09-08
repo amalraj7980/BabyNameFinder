@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import Share from 'react-native-share';
 import Toast from 'react-native-toast-message';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
@@ -31,16 +30,7 @@ import {
   setGenderPrefs,
   getStylePrefs,
   setStylePrefs,
-  getInviteSent,
-  getPartnerCode,
-  isPartnerLinked,
 } from '../../services/onboardingStorage';
-import {
-  createPartnerSession,
-  joinPartnerSession,
-  leavePartnerSession,
-  refreshPartnerConnection,
-} from '../../services/partner.service';
 import {logoutFirebase} from '../../services/auth.service';
 import {resolveDisplayName} from '../../utils/profileDisplay';
 import {getInstalledAppVersion} from '../../services/appUpdate';
@@ -83,36 +73,6 @@ const ACCOUNT_ROWS = [
   {key: 'restore', label: 'Restore Purchases', icon: 'refresh', color: C.primary},
 ];
 
-const WaitingDots = () => {
-  const [active, setActive] = useState(1);
-  useEffect(() => {
-    const id = setInterval(() => setActive(p => (p + 1) % 3), 450);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <View style={styles.dotsRow}>
-      {[0, 1, 2].map(i => (
-        <View
-          key={i}
-          style={[
-            styles.dot,
-            i === active ? styles.dotActive : styles.dotIdle,
-          ]}
-        />
-      ))}
-    </View>
-  );
-};
-
-const PillButton = ({title, icon, onPress}) => (
-  <TouchableOpacity style={styles.pillBtn} onPress={onPress} activeOpacity={0.88}>
-    <View style={styles.pillBtnInner}>
-      {icon}
-      <Text style={styles.pillBtnText}>{title}</Text>
-    </View>
-  </TouchableOpacity>
-);
-
 const StyleChip = ({label, selected, selectedColor, locked, onPress}) => (
   <TouchableOpacity
     activeOpacity={0.85}
@@ -153,14 +113,9 @@ const PreferencesScreen = ({navigation}) => {
   const [localName, setLocalName] = useState('');
   const [nameModal, setNameModal] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
-  const [inviteSent, setInviteSentState] = useState(false);
-  const [partnerLinked, setPartnerLinkedState] = useState(false);
-  const [partnerCode, setPartnerCode] = useState('');
   const [boy, setBoy] = useState(true);
   const [girl, setGirl] = useState(true);
   const [stylesSelected, setStylesSelected] = useState(['classic']);
-  const [codeModal, setCodeModal] = useState(false);
-  const [joinCode, setJoinCode] = useState('');
   const [appVersion, setAppVersion] = useState(APP_VERSION);
 
   const cardStyle = discoverCardStyle || 'detailed';
@@ -171,31 +126,15 @@ const PreferencesScreen = ({navigation}) => {
   });
 
   const loadPrefs = useCallback(async () => {
-    const [name, g, s, connection] = await Promise.all([
+    const [name, g, s] = await Promise.all([
       getDisplayName(),
       getGenderPrefs(),
       getStylePrefs(),
-      refreshPartnerConnection().catch(() => null),
     ]);
     setLocalName(name || '');
     setBoy(!!g.boy);
     setGirl(!!g.girl);
     setStylesSelected(Array.isArray(s) && s.length ? s : ['classic']);
-
-    if (connection) {
-      setPartnerLinkedState(!!connection.linked);
-      setInviteSentState(!!(connection.waiting || connection.linked));
-      setPartnerCode(connection.joinCode || '');
-    } else {
-      const [linked, invited, code] = await Promise.all([
-        isPartnerLinked(),
-        getInviteSent(),
-        getPartnerCode(),
-      ]);
-      setPartnerLinkedState(linked);
-      setInviteSentState(invited);
-      setPartnerCode(code);
-    }
   }, []);
 
   useEffect(() => {
@@ -258,99 +197,6 @@ const PreferencesScreen = ({navigation}) => {
     },
     [updateDiscoverCardStyle],
   );
-
-  const invitePartner = useCallback(async () => {
-    try {
-      const session = await createPartnerSession();
-      const code = session.joinCode || '';
-      setPartnerCode(code);
-      setInviteSentState(true);
-      setPartnerLinkedState(!!session.partnerUid);
-      try {
-        await Share.open({
-          title: 'Invite your partner',
-          message: `Join me on Baby Names and choose our baby's name together.\n\nPartner Code: ${code}`,
-        });
-      } catch (shareErr) {
-        // cancelled
-      }
-    } catch (e) {
-      Alert.alert(
-        'Could not create invite',
-        e?.message || 'Check your connection and try again.',
-      );
-    }
-  }, []);
-
-  const shareLink = useCallback(async () => {
-    try {
-      let code = partnerCode;
-      if (!code) {
-        const session = await createPartnerSession();
-        code = session.joinCode || '';
-        setPartnerCode(code);
-        setInviteSentState(true);
-      }
-      await Share.open({
-        title: 'Share invite link',
-        message: `Join me on Baby Names and choose our baby's name together.\n\nPartner Code: ${code}`,
-      });
-    } catch (e) {
-      // cancelled
-    }
-  }, [partnerCode]);
-
-  const copyCode = useCallback(async () => {
-    try {
-      let code = partnerCode;
-      if (!code) {
-        const session = await createPartnerSession();
-        code = session.joinCode || '';
-        setPartnerCode(code);
-        setInviteSentState(true);
-      }
-      Toast.show({type: 'success', text1: 'Code ready', text2: code});
-      try {
-        await Share.open({title: 'Partner code', message: code});
-      } catch (shareErr) {
-        // cancelled after toast
-      }
-    } catch (e) {
-      Alert.alert('Could not get code', e?.message || 'Try again.');
-    }
-  }, [partnerCode]);
-
-  const generateNewLink = useCallback(async () => {
-    try {
-      await leavePartnerSession().catch(() => {});
-      const session = await createPartnerSession();
-      setPartnerCode(session.joinCode);
-      setInviteSentState(true);
-      setPartnerLinkedState(false);
-      Toast.show({type: 'success', text1: 'New partner code ready'});
-    } catch (e) {
-      Alert.alert('Could not refresh code', e?.message || 'Try again.');
-    }
-  }, []);
-
-  const joinWithCode = useCallback(async () => {
-    const code = joinCode.trim();
-    if (!/^\d{6}$/.test(code)) {
-      Alert.alert('Enter a valid 6-digit invite code');
-      return;
-    }
-    try {
-      await joinPartnerSession(code);
-      setPartnerLinkedState(true);
-      setInviteSentState(true);
-      setPartnerCode(code);
-      setCodeModal(false);
-      setJoinCode('');
-      Toast.show({type: 'success', text1: 'Partner connected'});
-    } catch (e) {
-      Alert.alert('Could not join', e?.message || 'Try again.');
-    }
-  }, [joinCode]);
 
   const saveName = useCallback(async () => {
     const next = nameDraft.trim();
@@ -433,8 +279,6 @@ const PreferencesScreen = ({navigation}) => {
   );
 
   const initial = (displayName || 'Y').charAt(0).toUpperCase();
-  const showWaiting = inviteSent && !partnerLinked;
-
   return (
     <LinearGradient colors={[C.bgTop, C.bgBottom]} style={styles.root}>
       <View style={[styles.headerRow, {paddingTop: insets.top}]}>
@@ -502,100 +346,6 @@ const PreferencesScreen = ({navigation}) => {
             ) : null}
             <Text style={styles.profileMeta}>Swiping since August 2026</Text>
           </View>
-        </View>
-
-        {/* Partner */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Ionicons name="link" size={14} color={C.primary} />
-            <Text style={styles.cardHeaderTitle}>Partner Connection</Text>
-          </View>
-
-          {showWaiting ? (
-            <>
-              <Text style={styles.codeHint}>
-                Ask your partner to tap on the link you just shared, or they can
-                use this code instead:
-              </Text>
-              <Text style={styles.codeValue}>{partnerCode}</Text>
-              <TouchableOpacity style={styles.copyRow} onPress={copyCode}>
-                <Ionicons name="copy-outline" size={14} color={C.primary} />
-                <Text style={styles.copyText}>Copy code</Text>
-              </TouchableOpacity>
-              <WaitingDots />
-              <Text style={styles.waitingText}>
-                Waiting for your partner to join...
-              </Text>
-              <PillButton
-                title="Share Link"
-                onPress={shareLink}
-                icon={
-                  <Ionicons
-                    name="share-outline"
-                    size={14}
-                    color={C.surface}
-                  />
-                }
-              />
-              <View style={styles.linkRow}>
-                <TouchableOpacity onPress={() => setCodeModal(true)}>
-                  <Text style={styles.link}>I have a code</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={generateNewLink}>
-                  <Text style={styles.link}>Generate a new link</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : partnerLinked ? (
-            <>
-              <View style={styles.partnerEmpty}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={32}
-                  color={C.mint}
-                />
-                <Text style={styles.emptyTitle}>Partner connected</Text>
-                <Text style={styles.emptySub}>
-                  You're matching names together
-                </Text>
-              </View>
-              <Text style={styles.codeValue}>{partnerCode}</Text>
-              <PillButton
-                title="Share Link"
-                onPress={shareLink}
-                icon={
-                  <Ionicons
-                    name="share-outline"
-                    size={14}
-                    color={C.surface}
-                  />
-                }
-              />
-            </>
-          ) : (
-            <>
-              <View style={styles.partnerEmpty}>
-                <View style={styles.slashWrap}>
-                  <Ionicons name="people" size={30} color="#C5CCD6" />
-                  <View style={styles.slash} />
-                </View>
-                <Text style={styles.emptyTitle}>No partner connected</Text>
-                <Text style={styles.emptySub}>
-                  Connect to find names together
-                </Text>
-              </View>
-              <PillButton
-                title="Invite Partner"
-                onPress={invitePartner}
-                icon={<Ionicons name="link" size={14} color={C.surface} />}
-              />
-              <TouchableOpacity onPress={() => setCodeModal(true)}>
-                <Text style={[styles.link, styles.linkCenter]}>
-                  I have a code
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
         </View>
 
         {/* Name Preferences */}
@@ -819,33 +569,6 @@ const PreferencesScreen = ({navigation}) => {
           {APP_DISPLAY_NAME} · v{appVersion}
         </Text>
       </ScrollView>
-
-      <Modal visible={codeModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Enter invite code</Text>
-            <TextInput
-              value={joinCode}
-              onChangeText={setJoinCode}
-              keyboardType="number-pad"
-              maxLength={6}
-              placeholder="482913"
-              placeholderTextColor={C.textHint}
-              style={styles.modalInput}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtn}
-                onPress={() => setCodeModal(false)}>
-                <Text style={styles.modalCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtn} onPress={joinWithCode}>
-                <Text style={styles.modalOk}>Join</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal visible={nameModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>

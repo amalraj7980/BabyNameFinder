@@ -120,31 +120,30 @@ export const AuthContextProvider = ({children}) => {
 
   useEffect(() => {
     let unsubscribe = () => {};
-
-    const boot = async () => {
-      try {
-        await ensureFirebaseSession();
-      } catch (e) {
-        console.log('Firebase session bootstrap failed:', e?.message || e);
-      } finally {
-        setFirebaseReady(true);
-      }
-    };
-
-    boot();
+    let active = true;
 
     unsubscribe = onAuthStateChanged(async user => {
       try {
         if (!user) {
           const session = await ensureFirebaseSession();
-          await applySession(session);
+          if (active) {
+            await applySession(session);
+          }
           return;
         }
         const session = await toSessionPayload(user);
-        await applySession(session);
+        if (active) {
+          await applySession(session);
+        }
       } catch (e) {
         console.log('onAuthStateChanged error:', e?.message || e);
-        setVal(prev => ({...prev, authStateLoading: false}));
+        if (active) {
+          setVal(prev => ({...prev, authStateLoading: false}));
+        }
+      } finally {
+        if (active) {
+          setFirebaseReady(true);
+        }
       }
     });
 
@@ -154,6 +153,7 @@ export const AuthContextProvider = ({children}) => {
     );
 
     return () => {
+      active = false;
       unsubscribe();
       if (typeof linkingSub?.remove === 'function') {
         linkingSub.remove();

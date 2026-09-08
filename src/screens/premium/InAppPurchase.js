@@ -60,7 +60,7 @@ const FEATURE_ITEMS = [
   {
     id: 'unlimited_suggestions',
     title: 'Unlimited Suggestions',
-    subtitle: 'Suggest unlimited names to your partner',
+    subtitle: 'Explore unlimited name suggestions',
     icon: 'sparkles',
     price: '₹ 499',
   },
@@ -302,15 +302,14 @@ const InAppPurchase = ({navigation}) => {
           <View style={styles.heroGlow} />
           <Text style={styles.heroTitle}>Unlock More Names</Text>
           <Text style={styles.heroSub}>
-            One-time purchases. No subscriptions. Shared with your partner.
+            One-time purchases. No subscriptions.
           </Text>
         </View>
 
         <View style={styles.shareBanner}>
           <Ionicons name="people" size={18} color="#2F9E5B" />
           <Text style={styles.shareBannerText}>
-            Purchases are shared. Anything you buy is automatically unlocked for
-            your partner too.
+            Restore your purchases anytime from Preferences.
           </Text>
         </View>
 

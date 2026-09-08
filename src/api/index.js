@@ -9,6 +9,8 @@ import {
 } from '../services/auth.service';
 import {
   getBabyNames,
+  getBabyNamesPage,
+  getBabyNamesFilteredCount,
   getBabyNamesExcludingReactions,
   getNamesCount,
   seedBabyNamesIfNeeded,
@@ -24,6 +26,7 @@ import {
   removeLike,
   removeDislike,
   getUserReactions,
+  getLikedNamesPage as getLikedNamesPageFromService,
   getReactionCounts,
   getReactedNameIds,
   ensureUserReactionBuckets,
@@ -66,14 +69,40 @@ export const getExcludeReactions = async (filters = {}) => {
   return getBabyNamesExcludingReactions(filters, allIds);
 };
 
+/** Discover dashboard: bounded cursor page, never a full catalog read. */
+export const getExcludeReactionsPage = async (filters = {}) => {
+  const userId = filters.u;
+  const hasCachedReactionIds = Array.isArray(filters.reactedIds);
+  const hasUser =
+    userId !== null &&
+    userId !== undefined &&
+    userId !== 0 &&
+    userId !== '0' &&
+    userId !== '';
+  const {allIds} = hasCachedReactionIds
+    ? {allIds: filters.reactedIds}
+    : hasUser
+      ? await getReactedNameIds(userId)
+      : {allIds: []};
+  const page = await getBabyNamesPage(filters, allIds);
+  return {...page, excludedCount: allIds.length, reactedIds: allIds};
+};
+
 export const getAllBabyNames = async (filters = {}) => getBabyNames(filters);
+
+export const getFilteredNamesCount = async (filters = {}) =>
+  getBabyNamesFilteredCount(filters);
 
 export const getReactions = async (userId, filters = {}) =>
   getUserReactions(userId, filters);
 
+export const getLikedNamesPage = async (userId, options = {}) =>
+  getLikedNamesPageFromService(userId, options);
+
 export const getLikeDislikeCount = async userId => getReactionCounts(userId);
 
-export const getTotalNamesCount = async () => getNamesCount();
+export const getTotalNamesCount = async (options = {}) =>
+  getNamesCount(options);
 
 export const ensureSeedData = async () => {
   startBabyNamesLiveSync();

@@ -23,7 +23,7 @@ import AntDesign from 'react-native-vector-icons/AntDesign';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Share from 'react-native-share';
 import {Storage} from '../util';
-import {getTotalNamesCount, ensureSeedData} from '../api';
+import {getTotalNamesCount} from '../api';
 import {
   initConnection,
   purchaseErrorListener,
@@ -53,7 +53,6 @@ const AppStack = ({navigation}) => {
   useEffect(() => {
     const loadCount = async () => {
       try {
-        await ensureSeedData();
         const ResData = await getTotalNamesCount();
         setNamecount(ResData.namesCount ?? 0);
       } catch (error) {

@@ -30,17 +30,16 @@ import {
   likeUser,
   undoLikeUser,
   undoDisLikeUser,
-  getExcludeReactions,
-  subscribeBabyNames,
+  getExcludeReactionsPage,
+  getFilteredNamesCount,
+  getTotalNamesCount,
 } from '../../api';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
 import {Storage} from '../../util';
 import {
   getDisplayName,
-  isPartnerLinked,
 } from '../../services/onboardingStorage';
-import {refreshPartnerConnection} from '../../services/partner.service';
 import {speakNamePronunciation} from '../../services/speakPronunciation';
 import {shareBabyName} from '../../services/shareBabyName';
 import {resolveDisplayName} from '../../utils/profileDisplay';
@@ -52,7 +51,21 @@ const CARD_WIDTH = SCREEN_W * 0.86;
 const CARD_HEIGHT_DETAILED = Math.min(SCREEN_H * 0.42, 390);
 const CARD_HEIGHT_SIMPLE = Math.min(SCREEN_H * 0.30, 280);
 const CARD_H_MARGIN = (SCREEN_W - CARD_WIDTH) / 2;
-const NOTIFY_AFTER_LIKES = 3;
+const DISCOVER_PAGE_SIZE = 20;
+const PREFETCH_REMAINING_CARDS = 4;
+
+const hasSelectedFilters = filters =>
+  Boolean(
+    (filters?.firstLetter || '').trim() ||
+      (filters?.lastLetter || '').trim() ||
+      (filters?.contains || '').trim() ||
+      (filters?.originQuery || '').trim() ||
+      filters?.compoundLetter ||
+      (filters?.gender && filters.gender !== 'all') ||
+      (filters?.nameLength && filters.nameLength !== 'all') ||
+      (filters?.style && filters.style !== 'all') ||
+      (Array.isArray(filters?.origins) && filters.origins.length > 0),
+  );
 
 const C = {
   primary: '#FF6B6B',
@@ -200,16 +213,17 @@ const DiscoverScreen = ({navigation}) => {
     useContext(AuthContext);
 
   const [babyNamesData, setBabyNamesData] = useState([]);
-  const [cardIndex, setCardIndex] = useState(0);
+  const [deckExhausted, setDeckExhausted] = useState(true);
   const [deckEpoch, setDeckEpoch] = useState(0);
   const [swipedCards, setSwipedCards] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshingResults, setIsRefreshingResults] = useState(false);
+  const [isLoadingNextPage, setIsLoadingNextPage] = useState(false);
+  const [hasMorePages, setHasMorePages] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [filteredCount, setFilteredCount] = useState(null);
+  const [filteredCountExact, setFilteredCountExact] = useState(false);
   const [localName, setLocalName] = useState('');
-  const [partnerLinked, setPartnerLinked] = useState(false);
-  const [likeCountSession, setLikeCountSession] = useState(0);
-  const [notifyModalVisible, setNotifyModalVisible] = useState(false);
-  const [notifyAsked, setNotifyAsked] = useState(false);
 
   const swiperRef = useRef(null);
   const loadingRequestId = useRef(0);
@@ -218,33 +232,66 @@ const DiscoverScreen = ({navigation}) => {
   const swipedCardsRef = useRef(swipedCards);
   const cardIndexRef = useRef(0);
   const swipingLockRef = useRef(false);
+  const nextCursorRef = useRef(null);
+  const hasMorePagesRef = useRef(true);
+  const catalogCountRef = useRef(null);
+  const reactedIdsRef = useRef(null);
+  const loadingNextPageRef = useRef(false);
+  const prefetchedPageRef = useRef(null);
+  const prefetchPromiseRef = useRef(null);
+  const prefetchCursorRef = useRef(null);
+  const catalogCountRefreshPromiseRef = useRef(null);
 
   babyNamesDataRef.current = babyNamesData;
   swipedCardsRef.current = swipedCards;
-  cardIndexRef.current = cardIndex;
 
   const cardStyle = discoverCardStyle || 'detailed';
   const isSimple = cardStyle === 'simple';
   const cardHeight = isSimple ? CARD_HEIGHT_SIMPLE : CARD_HEIGHT_DETAILED;
 
   const refreshProfile = useCallback(async () => {
-    const [name, connection] = await Promise.all([
-      getDisplayName(),
-      refreshPartnerConnection().catch(() => null),
-    ]);
+    const name = await getDisplayName();
     setLocalName(name || '');
-    if (connection) {
-      setPartnerLinked(!!connection.linked);
-    } else {
-      setPartnerLinked(await isPartnerLinked());
-    }
   }, []);
+
+  const refreshCatalogCount = useCallback(async () => {
+    if (!firebaseReady) {
+      return;
+    }
+    if (catalogCountRefreshPromiseRef.current) {
+      return catalogCountRefreshPromiseRef.current;
+    }
+
+    const request = getTotalNamesCount({forceRefresh: true})
+      .then(response => {
+        const totalCount = Number(response?.namesCount);
+        if (!Number.isFinite(totalCount) || totalCount < 0) {
+          return;
+        }
+        catalogCountRef.current = totalCount;
+        // This is the catalog total, not a count of cards left after swiping.
+        setBabyNamesCount(totalCount);
+        void Storage.setBabyNamesCount(totalCount);
+      })
+      .catch(error => {
+        console.warn('Failed to refresh the baby-name count:', error);
+      });
+
+    catalogCountRefreshPromiseRef.current = request;
+    request.finally(() => {
+      if (catalogCountRefreshPromiseRef.current === request) {
+        catalogCountRefreshPromiseRef.current = null;
+      }
+    });
+    return request;
+  }, [firebaseReady, setBabyNamesCount]);
 
   useFocusEffect(
     useCallback(() => {
       applyAppStatusBar('dark-content');
       void refreshProfile();
-    }, [refreshProfile]),
+      void refreshCatalogCount();
+    }, [refreshCatalogCount, refreshProfile]),
   );
 
   useEffect(() => {
@@ -255,57 +302,107 @@ const DiscoverScreen = ({navigation}) => {
     (names, count) => {
       const deck = normalizeDeckCards(names || []);
       setBabyNamesData(deck);
-      setBabyNamesCount(count ?? deck.length);
-      setCardIndex(0);
+      if (typeof count === 'number') {
+        setBabyNamesCount(count);
+      }
       cardIndexRef.current = 0;
+      setDeckExhausted(deck.length === 0);
       setSwipedCards([]);
+      setIsUndoEnabled(false);
       setDeckEpoch(e => e + 1);
     },
-    [setBabyNamesCount],
+    [setBabyNamesCount, setIsUndoEnabled],
   );
 
   const fetchBabyNamesData = useCallback(
     async (options = {}) => {
       const {silent = false} = options;
       const requestId = ++loadingRequestId.current;
+      nextCursorRef.current = null;
+      hasMorePagesRef.current = true;
+      setHasMorePages(false);
+      reactedIdsRef.current = null;
+      prefetchedPageRef.current = null;
+      prefetchPromiseRef.current = null;
+      prefetchCursorRef.current = null;
       if (!silent && !hasLoadedOnceRef.current) {
         setIsLoading(true);
+      } else if (!silent) {
+        setIsRefreshingResults(true);
       }
       const queryParams = {
-        pageCount: 1000,
-        page: 0,
+        pageSize: DISCOVER_PAGE_SIZE,
+        cursor: null,
         u: userId ?? 0,
         startWith: seachfilterData?.firstLetter ?? '',
         endsWith: seachfilterData?.lastLetter ?? '',
         compoundName: seachfilterData?.compoundLetter ?? false,
         gender: seachfilterData?.gender ?? 'all',
         contains: seachfilterData?.contains ?? '',
+        originQuery: seachfilterData?.originQuery ?? '',
+        nameLength: seachfilterData?.nameLength ?? 'all',
+        style: seachfilterData?.style ?? 'all',
         origins: seachfilterData?.origins ?? [],
       };
+      const filtering = hasSelectedFilters(queryParams);
+
+      // Do not briefly show the previous filter's total while the new request is
+      // still being evaluated.
+      if (filtering) {
+        setFilteredCount(null);
+        setFilteredCountExact(false);
+      }
 
       try {
-        const response = await getExcludeReactions({
-          ...queryParams,
-          forceRefresh: !silent,
-        });
+        const [response, countResponse] = await Promise.all([
+          getExcludeReactionsPage(queryParams),
+          filtering
+            ? getFilteredNamesCount(queryParams)
+            : catalogCountRef.current === null
+              ? getTotalNamesCount()
+              : Promise.resolve({namesCount: catalogCountRef.current}),
+        ]);
         if (requestId !== loadingRequestId.current) {
           return;
         }
 
+        const namesCount = Number(countResponse?.namesCount);
+        const hasExactFilteredCount =
+          filtering &&
+          countResponse?.exact === true &&
+          Number.isFinite(namesCount);
+        if (filtering) {
+          setFilteredCount(hasExactFilteredCount ? namesCount : null);
+          setFilteredCountExact(hasExactFilteredCount);
+        } else if (Number.isFinite(namesCount)) {
+          catalogCountRef.current = namesCount;
+          setFilteredCount(null);
+          setFilteredCountExact(false);
+        }
         const names = response.babyNames || [];
-        const count = response.count ?? 0;
+        const count =
+          !filtering && Number.isFinite(namesCount) ? namesCount : undefined;
 
         if (silent) {
           const idx = cardIndexRef.current;
           const len = babyNamesDataRef.current.length;
           const midDeck = idx > 0 && idx < len;
           if (midDeck || swipingLockRef.current) {
-            setBabyNamesCount(count);
+            if (typeof count === 'number') {
+              setBabyNamesCount(count);
+            }
             return;
           }
         }
 
         replaceDeck(names, count);
+        if (typeof count === 'number') {
+          void Storage.setBabyNamesCount(count);
+        }
+        nextCursorRef.current = response.nextCursor;
+        hasMorePagesRef.current = !!response.hasMore;
+        setHasMorePages(!!response.hasMore);
+        reactedIdsRef.current = response.reactedIds || [];
         hasLoadedOnceRef.current = true;
         setHasLoadedOnce(true);
       } catch (error) {
@@ -313,43 +410,120 @@ const DiscoverScreen = ({navigation}) => {
       } finally {
         if (requestId === loadingRequestId.current) {
           setIsLoading(false);
+          setIsRefreshingResults(false);
         }
       }
     },
     [seachfilterData, userId, replaceDeck],
   );
 
-  useEffect(() => {
-    fetchBabyNamesData();
-  }, [fetchBabyNamesData, firebaseReady, userId, loginOccurred]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeBabyNames(names => {
-      if (Array.isArray(names)) {
-        fetchBabyNamesData({silent: true});
-      }
-    });
-    return unsubscribe;
-  }, [fetchBabyNamesData]);
-
-  const bumpCountDown = useCallback(async () => {
-    const currentCount = await Storage.getBabyNamesCount();
-    if (currentCount !== null) {
-      const updatedCount = currentCount - 1;
-      setBabyNamesCount(updatedCount);
-      await Storage.setBabyNamesCount(updatedCount);
-    }
-  }, [setBabyNamesCount]);
-
-  const maybeShowNotifyModal = useCallback(
-    nextLikeCount => {
-      if (!notifyAsked && nextLikeCount >= NOTIFY_AFTER_LIKES) {
-        setNotifyAsked(true);
-        setNotifyModalVisible(true);
-      }
-    },
-    [notifyAsked],
+  const fetchNextPage = useCallback(
+    cursor =>
+      getExcludeReactionsPage({
+        pageSize: DISCOVER_PAGE_SIZE,
+        cursor,
+        reactedIds: reactedIdsRef.current || [],
+        u: userId ?? 0,
+        startWith: seachfilterData?.firstLetter ?? '',
+        endsWith: seachfilterData?.lastLetter ?? '',
+        compoundName: seachfilterData?.compoundLetter ?? false,
+        gender: seachfilterData?.gender ?? 'all',
+        contains: seachfilterData?.contains ?? '',
+        originQuery: seachfilterData?.originQuery ?? '',
+        nameLength: seachfilterData?.nameLength ?? 'all',
+        style: seachfilterData?.style ?? 'all',
+        origins: seachfilterData?.origins ?? [],
+      }),
+    [seachfilterData, userId],
   );
+
+  const prefetchNextPage = useCallback(() => {
+    const cursor = nextCursorRef.current;
+    if (
+      prefetchedPageRef.current ||
+      prefetchPromiseRef.current ||
+      !hasMorePagesRef.current ||
+      !cursor
+    ) {
+      return;
+    }
+
+    const requestId = loadingRequestId.current;
+    prefetchCursorRef.current = cursor;
+    let pending;
+    pending = fetchNextPage(cursor)
+      .then(response => {
+        if (
+          requestId === loadingRequestId.current &&
+          cursor === nextCursorRef.current
+        ) {
+          prefetchedPageRef.current = {requestId, cursor, response};
+        }
+        return response;
+      })
+      .catch(error => {
+        console.error(`Failed to prefetch the next name page: ${error}`);
+        return null;
+      })
+      .finally(() => {
+        if (prefetchPromiseRef.current === pending) {
+          prefetchPromiseRef.current = null;
+          prefetchCursorRef.current = null;
+        }
+      });
+    prefetchPromiseRef.current = pending;
+  }, [fetchNextPage]);
+
+  const loadNextPage = useCallback(async () => {
+    if (
+      loadingNextPageRef.current ||
+      !hasMorePagesRef.current ||
+      !nextCursorRef.current
+    ) {
+      return;
+    }
+
+    const requestId = loadingRequestId.current;
+    loadingNextPageRef.current = true;
+    setIsLoadingNextPage(true);
+    try {
+      const cursor = nextCursorRef.current;
+      const prefetched = prefetchedPageRef.current;
+      let response =
+        prefetched?.requestId === requestId && prefetched.cursor === cursor
+          ? prefetched.response
+          : null;
+      if (!response && prefetchCursorRef.current === cursor) {
+        response = await prefetchPromiseRef.current;
+      }
+      if (!response) {
+        response = await fetchNextPage(cursor);
+      }
+      if (requestId !== loadingRequestId.current) {
+        return;
+      }
+      prefetchedPageRef.current = null;
+      nextCursorRef.current = response.nextCursor;
+      hasMorePagesRef.current = !!response.hasMore;
+      setHasMorePages(!!response.hasMore);
+      reactedIdsRef.current = response.reactedIds || [];
+      replaceDeck(response.babyNames || []);
+    } catch (error) {
+      console.error(`Failed to load the next name page: ${error}`);
+    } finally {
+      if (requestId === loadingRequestId.current) {
+        setIsLoadingNextPage(false);
+      }
+      loadingNextPageRef.current = false;
+    }
+  }, [fetchNextPage, replaceDeck]);
+
+  useEffect(() => {
+    if (!firebaseReady) {
+      return;
+    }
+    void fetchBabyNamesData();
+  }, [fetchBabyNamesData, firebaseReady, userId, loginOccurred]);
 
   const releaseSwipingLock = useCallback(() => {
     setTimeout(() => {
@@ -365,19 +539,13 @@ const DiscoverScreen = ({navigation}) => {
       try {
         const PAYLOAD = {userId: userId ?? 0, nameId: card.id};
         setSwipedCards(state => [...state, {card, action: 'liked'}]);
-        await bumpCountDown();
         await likeUser(PAYLOAD);
         setIsUndoEnabled(true);
-        setLikeCountSession(prev => {
-          const next = prev + 1;
-          maybeShowNotifyModal(next);
-          return next;
-        });
       } catch (e) {
         console.log('err', e);
       }
     },
-    [userId, bumpCountDown, setIsUndoEnabled, maybeShowNotifyModal],
+    [userId, setIsUndoEnabled],
   );
 
   const disLikeuser = useCallback(
@@ -388,14 +556,13 @@ const DiscoverScreen = ({navigation}) => {
       try {
         const PAYLOAD = {userId: userId ?? 0, nameId: card.id};
         setSwipedCards(state => [...state, {card, action: 'disliked'}]);
-        await bumpCountDown();
         await disLikeUser(PAYLOAD);
         setIsUndoEnabled(true);
       } catch (e) {
         console.log('err', e);
       }
     },
-    [userId, bumpCountDown, setIsUndoEnabled],
+    [userId, setIsUndoEnabled],
   );
 
   const undoLastSwipe = useCallback(() => {
@@ -409,11 +576,9 @@ const DiscoverScreen = ({navigation}) => {
     }
     const nextStack = stack.slice(0, -1);
     setSwipedCards(nextStack);
-    setBabyNamesCount(prev => (typeof prev === 'number' ? prev + 1 : 1));
-
     const prevIndex = Math.max(0, cardIndexRef.current - 1);
-    setCardIndex(prevIndex);
     cardIndexRef.current = prevIndex;
+    setDeckExhausted(false);
     swiperRef.current?.swipeBack?.();
 
     const PAYLOAD = {
@@ -427,17 +592,14 @@ const DiscoverScreen = ({navigation}) => {
 
     if (lastSwiped.action === 'liked') {
       undoLikeUser(PAYLOAD)
-        .then(() => {
-          onUndoDone();
-          setLikeCountSession(prev => Math.max(0, prev - 1));
-        })
+        .then(onUndoDone)
         .catch(error => console.log('Error undoing like:', error));
     } else if (lastSwiped.action === 'disliked') {
       undoDisLikeUser(PAYLOAD)
         .then(onUndoDone)
         .catch(error => console.log('Error undoing dislike:', error));
     }
-  }, [userId, setBabyNamesCount, setIsUndoEnabled]);
+  }, [userId, setIsUndoEnabled]);
 
   const openNameDetails = useCallback(
     item => navigation.navigate('NameInformation', {item}),
@@ -452,30 +614,68 @@ const DiscoverScreen = ({navigation}) => {
     index => {
       const card = babyNamesDataRef.current[index];
       const nextIndex = index + 1;
-      setCardIndex(nextIndex);
+      const reachedPageEnd = nextIndex >= babyNamesDataRef.current.length;
       cardIndexRef.current = nextIndex;
       releaseSwipingLock();
+      if (
+        nextIndex >=
+        babyNamesDataRef.current.length - PREFETCH_REMAINING_CARDS
+      ) {
+        prefetchNextPage();
+      }
+      if (reachedPageEnd) {
+        setDeckExhausted(true);
+        if (hasMorePagesRef.current && nextCursorRef.current) {
+          setIsLoadingNextPage(true);
+        }
+      }
       if (!card) {
+        if (reachedPageEnd) {
+          void loadNextPage();
+        }
         return;
       }
-      disLikeuser(card);
+      if (reachedPageEnd) {
+        void disLikeuser(card).finally(loadNextPage);
+      } else {
+        void disLikeuser(card);
+      }
     },
-    [disLikeuser, releaseSwipingLock],
+    [disLikeuser, loadNextPage, prefetchNextPage, releaseSwipingLock],
   );
 
   const onSwipedRight = useCallback(
     index => {
       const card = babyNamesDataRef.current[index];
       const nextIndex = index + 1;
-      setCardIndex(nextIndex);
+      const reachedPageEnd = nextIndex >= babyNamesDataRef.current.length;
       cardIndexRef.current = nextIndex;
       releaseSwipingLock();
+      if (
+        nextIndex >=
+        babyNamesDataRef.current.length - PREFETCH_REMAINING_CARDS
+      ) {
+        prefetchNextPage();
+      }
+      if (reachedPageEnd) {
+        setDeckExhausted(true);
+        if (hasMorePagesRef.current && nextCursorRef.current) {
+          setIsLoadingNextPage(true);
+        }
+      }
       if (!card) {
+        if (reachedPageEnd) {
+          void loadNextPage();
+        }
         return;
       }
-      likeuser(card);
+      if (reachedPageEnd) {
+        void likeuser(card).finally(loadNextPage);
+      } else {
+        void likeuser(card);
+      }
     },
-    [likeuser, releaseSwipingLock],
+    [likeuser, loadNextPage, prefetchNextPage, releaseSwipingLock],
   );
 
   const onPassPress = useCallback(() => {
@@ -595,37 +795,43 @@ const DiscoverScreen = ({navigation}) => {
     isUserLoggedin,
   });
   const headerTitle = isUserLoggedin ? headerName : 'Guest user';
-  const remainingCount =
+  const catalogCount =
     typeof babyNamesCount === 'number'
       ? Math.max(0, babyNamesCount)
       : babyNamesData.length;
-  const countLabel =
-    remainingCount === 1 ? 'name left to discover' : 'names left to discover';
-  const countDisplay = remainingCount.toLocaleString('en-US');
-  const hasActiveFilters = Boolean(
-    (seachfilterData?.firstLetter || '').trim() ||
-      (seachfilterData?.lastLetter || '').trim() ||
-      (seachfilterData?.contains || '').trim() ||
-      seachfilterData?.compoundLetter ||
-      (seachfilterData?.gender && seachfilterData.gender !== 'all') ||
-      (Array.isArray(seachfilterData?.origins) &&
-        seachfilterData.origins.length > 0),
-  );
+  const hasActiveFilters = hasSelectedFilters(seachfilterData);
+  const filteredReadyCount = babyNamesData.length;
+  const countLabel = hasActiveFilters
+    ? filteredCountExact
+      ? filteredCount === 1
+        ? 'matching name'
+        : 'matching names'
+      : filteredReadyCount === 1
+      ? 'matching name ready'
+      : 'matching names ready'
+    : catalogCount === 1
+      ? 'name in our catalog'
+      : 'names in our catalog';
+  const countDisplay = hasActiveFilters
+    ? filteredCountExact
+      ? filteredCount.toLocaleString('en-US')
+      : filteredReadyCount.toLocaleString('en-US')
+    : catalogCount.toLocaleString('en-US');
   const clearFilters = useCallback(() => {
     setSeachfilterData(prev => ({
       ...prev,
       firstLetter: '',
       lastLetter: '',
       contains: '',
+      originQuery: '',
+      nameLength: 'all',
+      style: 'all',
       compoundLetter: false,
       gender: 'all',
       origins: [],
       search: false,
     }));
   }, [setSeachfilterData]);
-  const deckExhausted =
-    babyNamesData.length === 0 || cardIndex >= babyNamesData.length;
-
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
       <LinearGradient
@@ -654,7 +860,7 @@ const DiscoverScreen = ({navigation}) => {
       <View
         style={[styles.countBanner, hasActiveFilters && styles.countBannerFiltered]}
         accessibilityRole="text"
-        accessibilityLabel={`${remainingCount} ${countLabel}${
+        accessibilityLabel={`${countDisplay} ${countLabel}${
           hasActiveFilters ? ', filters applied' : ''
         }`}>
         <View style={styles.countGlow} />
@@ -687,7 +893,18 @@ const DiscoverScreen = ({navigation}) => {
       </View>
 
       <View style={styles.deckArea}>
-        <View style={[styles.cardStage, {height: cardHeight + 18}]}>
+        {isRefreshingResults ? (
+          <View
+            style={styles.filterLoadingPill}
+            accessible
+            accessibilityLiveRegion="polite"
+            accessibilityLabel="Updating names">
+            <ActivityIndicator size="small" color={C.primary} />
+            <Text style={styles.filterLoadingText}>Updating names…</Text>
+          </View>
+        ) : null}
+        <View
+          style={[styles.cardStage, {height: cardHeight + 18}]}>
           <View
             pointerEvents="none"
             style={[
@@ -716,12 +933,28 @@ const DiscoverScreen = ({navigation}) => {
               <View style={styles.empty}>
                 <ActivityIndicator size="large" color={C.primary} />
               </View>
+            ) : deckExhausted && isLoadingNextPage ? (
+              <View style={styles.empty}>
+                <ActivityIndicator size="large" color={C.primary} />
+                <Text style={styles.emptySub}>Loading more names…</Text>
+              </View>
             ) : deckExhausted ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>No more names</Text>
                 <Text style={styles.emptySub}>
-                  Check back later or adjust your preferences.
+                  {hasMorePages
+                    ? 'Continue searching for more matching names.'
+                    : 'Check back later or adjust your preferences.'}
                 </Text>
+                {hasMorePages ? (
+                  <TouchableOpacity
+                    style={styles.continueSearchBtn}
+                    onPress={() => void loadNextPage()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Search more matching names">
+                    <Text style={styles.continueSearchText}>Search more</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : (
               <Swiper
@@ -789,39 +1022,6 @@ const DiscoverScreen = ({navigation}) => {
         </View>
       ) : null}
 
-      <Modal
-        visible={notifyModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setNotifyModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalIconWrap}>
-              <Ionicons name="notifications" size={30} color={C.primary} />
-              <View style={styles.modalBadgeDot} />
-            </View>
-            <Text style={styles.modalTitle}>Get notified when you match?</Text>
-            <Text style={styles.modalSub}>
-              We'll let you know the moment you and your partner love the same
-              name.
-            </Text>
-            <View style={styles.modalDivider} />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalActionHalf}
-                onPress={() => setNotifyModalVisible(false)}>
-                <Text style={styles.modalSecondary}>Not Now</Text>
-              </TouchableOpacity>
-              <View style={styles.modalVDivider} />
-              <TouchableOpacity
-                style={styles.modalActionHalf}
-                onPress={() => setNotifyModalVisible(false)}>
-                <Text style={styles.modalPrimaryText}>Turn On</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -993,6 +1193,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     paddingBottom: 4,
+  },
+  filterLoadingPill: {
+    position: 'absolute',
+    top: 2,
+    zIndex: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.24)',
+    ...softShadow,
+  },
+  filterLoadingText: {
+    fontFamily: Fonts.semibold,
+    fontSize: 12,
+    color: C.textMuted,
   },
   cardStage: {
     width: '100%',
@@ -1171,6 +1391,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.textMuted,
     textAlign: 'center',
+  },
+  continueSearchBtn: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: C.primary,
+  },
+  continueSearchText: {
+    fontFamily: Fonts.semibold,
+    fontSize: 13,
+    color: C.surface,
   },
   loader: {
     ...StyleSheet.absoluteFillObject,

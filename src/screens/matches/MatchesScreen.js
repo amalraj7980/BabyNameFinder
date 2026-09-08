@@ -4,6 +4,7 @@ import React, {
   useContext,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import {
   View,
@@ -21,7 +22,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
 import {BrandMark, SegmentedTabs} from '../../components/ui/DesignSystem';
-import {getReactions, disLikeUser} from '../../api';
+import {getLikedNamesPage, disLikeUser} from '../../api';
 import {AuthContext} from '../../context/AuthContext';
 import {AppContext} from '../../context/AppContext';
 import {
@@ -46,6 +47,7 @@ const TAB_OPTIONS = [
   {label: 'My Matches', value: 'matches'},
   {label: 'I Liked', value: 'liked'},
 ];
+const LIKED_PAGE_SIZE = 20;
 
 const MatchesScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
@@ -62,25 +64,68 @@ const MatchesScreen = ({navigation}) => {
   const [partnerLinked, setPartnerLinked] = useState(false);
   const [partnerSession, setPartnerSession] = useState(null);
   const [dislikingId, setDislikingId] = useState(null);
+  const [isLoadingMoreLiked, setIsLoadingMoreLiked] = useState(false);
+  const [hasMoreLiked, setHasMoreLiked] = useState(true);
+  const likedCursorRef = useRef(null);
+  const loadingLikedRef = useRef(false);
+  const loadingMoreLikedRef = useRef(false);
+  const hasMoreLikedRef = useRef(true);
 
   const fetchLiked = useCallback(async () => {
+    if (loadingLikedRef.current) {
+      return;
+    }
+    loadingLikedRef.current = true;
     setIsLoading(true);
-    const queryParams = {
-      pageCount: 1000,
-      page: 0,
-      startWith: '',
-      endsWith: '',
-      compoundName: false,
-      gender: 'all',
-      contains: '',
-    };
     try {
-      const response = await getReactions(userId, queryParams);
+      const response = await getLikedNamesPage(userId, {
+        pageSize: LIKED_PAGE_SIZE,
+      });
       setLikedNames(response?.likes ?? []);
+      likedCursorRef.current = response?.nextCursor ?? null;
+      hasMoreLikedRef.current = !!response?.hasMore;
+      setHasMoreLiked(hasMoreLikedRef.current);
     } catch (error) {
       console.error(`Failed to fetch likes: ${error}`);
     } finally {
+      loadingLikedRef.current = false;
       setIsLoading(false);
+    }
+  }, [userId]);
+
+  const loadMoreLiked = useCallback(async () => {
+    if (
+      loadingLikedRef.current ||
+      loadingMoreLikedRef.current ||
+      !hasMoreLikedRef.current ||
+      !likedCursorRef.current
+    ) {
+      return;
+    }
+
+    loadingMoreLikedRef.current = true;
+    setIsLoadingMoreLiked(true);
+    try {
+      const response = await getLikedNamesPage(userId, {
+        pageSize: LIKED_PAGE_SIZE,
+        cursor: likedCursorRef.current,
+      });
+      const nextPage = response?.likes ?? [];
+      setLikedNames(previous => {
+        const knownIds = new Set(previous.map(item => String(item.id)));
+        return [
+          ...previous,
+          ...nextPage.filter(item => !knownIds.has(String(item.id))),
+        ];
+      });
+      likedCursorRef.current = response?.nextCursor ?? null;
+      hasMoreLikedRef.current = !!response?.hasMore;
+      setHasMoreLiked(hasMoreLikedRef.current);
+    } catch (error) {
+      console.error(`Failed to load more likes: ${error}`);
+    } finally {
+      loadingMoreLikedRef.current = false;
+      setIsLoadingMoreLiked(false);
     }
   }, [userId]);
 
@@ -131,13 +176,15 @@ const MatchesScreen = ({navigation}) => {
         }
       })();
       unsubLocal = subscribeLocalFavorites(() => {
-        void fetchLiked();
+        if (tab === 'liked') {
+          void fetchLiked();
+        }
       });
       return () => {
         unsubLocal();
         unsubPartner();
       };
-    }, [userId, fetchLiked, isUserLoggedin, authDisplayName]),
+    }, [userId, fetchLiked, isUserLoggedin, authDisplayName, tab]),
   );
 
   useEffect(() => {
@@ -149,14 +196,17 @@ const MatchesScreen = ({navigation}) => {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await fetchLiked();
-      const session = await getActivePartnerSession();
-      setPartnerSession(session);
+      if (tab === 'liked') {
+        await fetchLiked();
+      } else {
+        const session = await getActivePartnerSession();
+        setPartnerSession(session);
+      }
     } catch (e) {
       console.log(e);
     }
     setIsRefreshing(false);
-  }, [fetchLiked]);
+  }, [fetchLiked, tab]);
 
   const openDetails = useCallback(
     item => navigation.navigate('NameInformation', {item}),
@@ -271,7 +321,7 @@ const MatchesScreen = ({navigation}) => {
       <Text style={styles.emptySub}>
         {partnerSession?.partnerUid
           ? 'Keep liking names — matches appear when you both like the same one.'
-          : 'Connect with your partner in Preferences, then like the same names together.'}
+          : 'Shared matches appear when both people like the same name.'}
       </Text>
     </View>
   );
@@ -345,6 +395,21 @@ const MatchesScreen = ({navigation}) => {
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={isLoading ? null : renderLikedEmpty}
             ItemSeparatorComponent={() => <View style={styles.sep} />}
+            onEndReached={() => {
+              void loadMoreLiked();
+            }}
+            onEndReachedThreshold={0.45}
+            ListFooterComponent={
+              isLoadingMoreLiked ? (
+                <View style={styles.pageLoader}>
+                  <ActivityIndicator size="small" color={T.colors.primary} />
+                </View>
+              ) : hasMoreLiked && likedNames.length ? (
+                <View style={styles.pageHint}>
+                  <Text style={styles.pageHintText}>Scroll for more favorites</Text>
+                </View>
+              ) : null
+            }
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -504,6 +569,19 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pageLoader: {
+    alignItems: 'center',
+    paddingVertical: 18,
+  },
+  pageHint: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  pageHintText: {
+    fontFamily: Fonts.medium,
+    fontSize: 12,
+    color: T.colors.textTertiary,
   },
 });
 

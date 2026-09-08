@@ -81,7 +81,7 @@ const OnboardingPrefsScreen = ({navigation}) => {
   return (
     <ScreenScaffold>
       <View style={{paddingTop: insets.top + 4}}>
-        <ProgressSteps step={1} total={3} />
+          <ProgressSteps step={1} total={2} />
         <TouchableOpacity
           style={styles.back}
           onPress={() => navigation.goBack()}

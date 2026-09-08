@@ -40,6 +40,21 @@ const GENDER_OPTIONS = [
   {label: 'Unisex', value: 'unisex', color: C.unisex},
 ];
 
+const NAME_LENGTH_OPTIONS = [
+  {label: 'All', value: 'all'},
+  {label: 'Short · 1–4', value: 'short'},
+  {label: 'Medium · 5–7', value: 'medium'},
+  {label: 'Long · 8+', value: 'long'},
+];
+
+const NAME_STYLE_OPTIONS = [
+  {label: 'All', value: 'all'},
+  {label: 'Modern', value: 'modern'},
+  {label: 'Classic', value: 'classic'},
+  {label: 'Biblical', value: 'biblical'},
+  {label: 'International', value: 'international'},
+];
+
 const FilterField = memo(function FilterField({
   label,
   value,
@@ -86,6 +101,9 @@ export default function NameFilterSearch({navigation}) {
     firstLetter: '',
     lastLetter: '',
     contains: '',
+    originQuery: '',
+    nameLength: 'all',
+    style: 'all',
     compoundLetter: false,
     gender: 'all',
     origins: [],
@@ -110,6 +128,9 @@ export default function NameFilterSearch({navigation}) {
       firstLetter: seachfilterData?.firstLetter ?? '',
       lastLetter: seachfilterData?.lastLetter ?? '',
       contains: seachfilterData?.contains ?? '',
+      originQuery: seachfilterData?.originQuery ?? '',
+      nameLength: seachfilterData?.nameLength ?? 'all',
+      style: seachfilterData?.style ?? 'all',
       compoundLetter: !!seachfilterData?.compoundLetter,
       gender: seachfilterData?.gender ?? 'all',
       origins: Array.isArray(seachfilterData?.origins)
@@ -143,6 +164,9 @@ export default function NameFilterSearch({navigation}) {
       firstLetter: (draft.firstLetter || '').trim(),
       lastLetter: (draft.lastLetter || '').trim(),
       contains: (draft.contains || '').trim(),
+      originQuery: (draft.originQuery || '').trim(),
+      nameLength: draft.nameLength || 'all',
+      style: draft.style || 'all',
       compoundLetter: !!draft.compoundLetter,
       gender: draft.gender || 'all',
       origins: Array.isArray(draft.origins) ? draft.origins : [],
@@ -156,6 +180,9 @@ export default function NameFilterSearch({navigation}) {
       firstLetter: '',
       lastLetter: '',
       contains: '',
+      originQuery: '',
+      nameLength: 'all',
+      style: 'all',
       compoundLetter: false,
       gender: 'all',
       origins: [],
@@ -230,6 +257,14 @@ export default function NameFilterSearch({navigation}) {
                 placeholder="e.g. an"
                 maxLength={24}
               />
+              <FilterField
+                label="Country or origin keyword"
+                value={draft.originQuery}
+                onChangeText={text => setField('originQuery', text)}
+                placeholder="e.g. India or Nigeria"
+                autoCapitalize="words"
+                maxLength={32}
+              />
 
               <View style={styles.toggleRow}>
                 <View style={styles.toggleTextCol}>
@@ -270,6 +305,69 @@ export default function NameFilterSearch({navigation}) {
                           styles.genderChipText,
                           selected && styles.genderChipTextOn,
                           !selected && {color: opt.color},
+                        ]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+                Name length
+              </Text>
+              <View style={styles.genderWrap}>
+                {NAME_LENGTH_OPTIONS.map(opt => {
+                  const selected = draft.nameLength === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.genderChip,
+                        selected && styles.detailChipSelected,
+                      ]}
+                      onPress={() => setField('nameLength', opt.value)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{selected}}>
+                      <Text
+                        style={[
+                          styles.genderChipText,
+                          selected && styles.genderChipTextOn,
+                          !selected && {color: C.text},
+                        ]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+                Name style
+              </Text>
+              <Text style={styles.sectionHint}>
+                Uses the catalog’s verified style tags when available.
+              </Text>
+              <View style={styles.genderWrap}>
+                {NAME_STYLE_OPTIONS.map(opt => {
+                  const selected = draft.style === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.genderChip,
+                        selected && styles.detailChipSelected,
+                      ]}
+                      onPress={() => setField('style', opt.value)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{selected}}>
+                      <Text
+                        style={[
+                          styles.genderChipText,
+                          selected && styles.genderChipTextOn,
+                          !selected && {color: C.text},
                         ]}>
                         {opt.label}
                       </Text>
@@ -491,6 +589,10 @@ const styles = StyleSheet.create({
   },
   genderChipTextOn: {
     color: '#FFFFFF',
+  },
+  detailChipSelected: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
   },
   footer: {
     paddingHorizontal: 16,

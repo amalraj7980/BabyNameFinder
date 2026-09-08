@@ -31,6 +31,8 @@ export const mapAuthError = error => {
       return 'Network error. Check your internet connection.';
     case 'auth/operation-not-allowed':
       return 'This sign-in method is disabled in Firebase Console.';
+    case 'auth/admin-restricted-operation':
+      return 'New account creation is currently restricted. Please contact support.';
     case 'auth/invalid-action-code':
       return 'This link is invalid or has already been used.';
     case 'auth/expired-action-code':

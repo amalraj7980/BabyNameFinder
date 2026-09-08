@@ -17,7 +17,10 @@ import {
   ProgressSteps,
   ScreenScaffold,
 } from '../../components/ui/DesignSystem';
-import {setDisplayName} from '../../services/onboardingStorage';
+import {
+  markAppEntered,
+  setDisplayName,
+} from '../../services/onboardingStorage';
 
 const OnboardingNameScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
@@ -25,7 +28,13 @@ const OnboardingNameScreen = ({navigation}) => {
 
   const onContinue = useCallback(async () => {
     await setDisplayName(name.trim());
-    navigation.navigate('OnboardingPartner');
+    await markAppEntered();
+    const parent = navigation.getParent();
+    if (parent) {
+      parent.reset({index: 0, routes: [{name: 'MainTabs'}]});
+      return;
+    }
+    navigation.reset({index: 0, routes: [{name: 'MainTabs'}]});
   }, [name, navigation]);
 
   return (
@@ -34,7 +43,7 @@ const OnboardingNameScreen = ({navigation}) => {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{paddingTop: insets.top + 4}}>
-          <ProgressSteps step={2} total={3} />
+          <ProgressSteps step={2} total={2} />
           <TouchableOpacity
             style={styles.back}
             onPress={() => navigation.goBack()}>
@@ -47,9 +56,9 @@ const OnboardingNameScreen = ({navigation}) => {
         </View>
 
         <View style={styles.center}>
-          <Text style={styles.heading}>This is how you'll appear in the app</Text>
+          <Text style={styles.heading}>What should we call you?</Text>
           <Text style={styles.sub}>
-            Your partner will see this when you match
+            Used to personalize your Baby Names experience
           </Text>
 
           <TextInput
@@ -64,7 +73,7 @@ const OnboardingNameScreen = ({navigation}) => {
             onSubmitEditing={onContinue}
           />
 
-          <Text style={styles.waiting}>113 names waiting for you</Text>
+          <Text style={styles.waiting}>Thousands of names waiting for you</Text>
           <Text style={styles.hint}>
             Prefer not to say? No problem, tap Continue.
           </Text>

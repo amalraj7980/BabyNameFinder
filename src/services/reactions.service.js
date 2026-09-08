@@ -21,6 +21,14 @@ import {
 import {markPartnerFavorite} from './partner.service';
 import firestore from '@react-native-firebase/firestore';
 import {
+  documentId,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+} from '@react-native-firebase/firestore';
+import {
   resolveReactionUserId,
   mapNameDoc,
   babyNameDocument,
@@ -307,6 +315,61 @@ const mapReactionDoc = d => {
     meaning: data.meaning || '',
     syllables: data.syllables || '',
     syllableCount: data.syllableCount || 1,
+  };
+};
+
+/**
+ * Reads one small cursor page from the signed-in user's likes collection.
+ * Unlike the legacy reaction function, this never downloads every like just
+ * to render the first screen.
+ */
+export const getLikedNamesPage = async (userId, options = {}) => {
+  const requestedSize = Number(options.pageSize);
+  const pageSize = Math.max(
+    1,
+    Math.min(Number.isFinite(requestedSize) ? requestedSize : 20, 50),
+  );
+  const uid = resolveReactionUserId(userId);
+  if (!uid) {
+    return {likes: [], nextCursor: null, hasMore: false};
+  }
+
+  let cursor = typeof options.cursor === 'string' ? options.cursor : null;
+  let hasMore = true;
+  const likes = [];
+
+  // Some legacy accounts have a `_meta` document. Skip it and make at most
+  // one extra small query so users still see a complete 20-name page.
+  while (hasMore && likes.length < pageSize) {
+    const remaining = pageSize - likes.length;
+    const constraints = [orderBy(documentId())];
+    if (cursor) {
+      constraints.push(startAfter(cursor));
+    }
+    constraints.push(limit(remaining));
+
+    const snapshot = await getDocs(
+      query(likedNamesCollection(uid), ...constraints),
+    );
+    const docs = snapshot.docs || [];
+    if (!docs.length) {
+      hasMore = false;
+      break;
+    }
+
+    cursor = docs[docs.length - 1].id;
+    hasMore = docs.length === remaining;
+    docs.forEach(docSnap => {
+      if (docSnap.id !== '_meta') {
+        likes.push(mapReactionDoc(docSnap));
+      }
+    });
+  }
+
+  return {
+    likes,
+    nextCursor: hasMore ? cursor : null,
+    hasMore,
   };
 };
 

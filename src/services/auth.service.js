@@ -22,7 +22,6 @@ import {
   getEmailVerificationActionCodeSettings,
   getPasswordResetActionCodeSettings,
 } from '../firebase/deepLink';
-import {forceSeedBabyNames, startBabyNamesLiveSync} from './babyNames.service';
 import {
   ensureUserProfileFromAuth,
   createUserProfileOnce,
@@ -106,12 +105,8 @@ export const updateUserDisplayName = async name => {
 export {toSessionPayload};
 
 const softCatalog = async () => {
-  try {
-    startBabyNamesLiveSync();
-    await forceSeedBabyNames(); // no-op under read-only rules
-  } catch (e) {
-    console.log('Catalog sync:', e?.message || e);
-  }
+  // The Discover dashboard loads its own 20-item cursor page on demand.
+  // Do not start a collection-wide listener during sign-in.
 };
 
 const softProfile = async (user, extra) => {
@@ -122,7 +117,17 @@ const softProfile = async (user, extra) => {
   }
 };
 
-/** Always ensure a Firebase user (anonymous guest if needed). */
+/**
+ * Firebase may be configured to prevent client-side account creation. In that
+ * case, public catalog browsing still works, but guest-only cloud features
+ * (reactions and new-account sign-up) are unavailable.
+ */
+const isGuestAccountCreationRestricted = error =>
+  ['auth/operation-not-allowed', 'auth/admin-restricted-operation'].includes(
+    error?.code,
+  );
+
+/** Ensure a Firebase user when guest account creation is permitted. */
 export const ensureFirebaseSession = async () => {
   let user = getCurrentUser();
   if (!user) {
@@ -130,11 +135,8 @@ export const ensureFirebaseSession = async () => {
       const cred = await signInAnonymously();
       user = cred.user;
     } catch (e) {
-      const code = e?.code || '';
-      if (code === 'auth/operation-not-allowed') {
-        console.warn(
-          'Anonymous Auth is disabled. Enable it in Firebase Console → Authentication → Sign-in method → Anonymous.',
-        );
+      if (isGuestAccountCreationRestricted(e)) {
+        return null;
       } else {
         console.warn('Anonymous sign-in failed:', e?.message || e);
       }
