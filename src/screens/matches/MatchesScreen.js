@@ -9,6 +9,7 @@ import React, {
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   TouchableOpacity,
   StyleSheet,
@@ -21,7 +22,7 @@ import {useFocusEffect} from '@react-navigation/native';
 
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
-import {BrandMark, SegmentedTabs} from '../../components/ui/DesignSystem';
+import {BrandMark} from '../../components/ui/DesignSystem';
 import {getLikedNamesPage, disLikeUser} from '../../api';
 import {AuthContext} from '../../context/AuthContext';
 import {AppContext} from '../../context/AppContext';
@@ -32,22 +33,36 @@ import {
 import {applyAppStatusBar} from '../../components/AppStatusBar';
 import {
   getActivePartnerSession,
-  subscribePartnerFavorites,
-  categorizePartnerFavorites,
   refreshPartnerConnection,
 } from '../../services/partner.service';
-import {fetchAllBabyNames} from '../../services/babyNames.service';
 import {subscribeLocalFavorites} from '../../services/localFavorites.service';
 import {resolveDisplayName} from '../../utils/profileDisplay';
-import auth from '@react-native-firebase/auth';
 
 const keyExtractor = item => String(item.id);
-
-const TAB_OPTIONS = [
-  {label: 'My Matches', value: 'matches'},
-  {label: 'I Liked', value: 'liked'},
-];
 const LIKED_PAGE_SIZE = 20;
+
+const GENDER_FILTERS = [
+  {label: 'All', value: 'all'},
+  {label: 'Boy', value: 'male'},
+  {label: 'Girl', value: 'female'},
+  {label: 'Unisex', value: 'unisex'},
+];
+
+const normalizeGender = value => {
+  const g = String(value || '')
+    .toLowerCase()
+    .trim();
+  if (g === 'boy' || g === 'male' || g === 'm') {
+    return 'male';
+  }
+  if (g === 'girl' || g === 'female' || g === 'f') {
+    return 'female';
+  }
+  if (g === 'unisex') {
+    return 'unisex';
+  }
+  return '';
+};
 
 const MatchesScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
@@ -55,9 +70,7 @@ const MatchesScreen = ({navigation}) => {
     useContext(AuthContext);
   const {likeCount, dislikeCount} = useContext(AppContext);
 
-  const [tab, setTab] = useState('matches');
   const [likedNames, setLikedNames] = useState([]);
-  const [bothLikeNames, setBothLikeNames] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [localName, setLocalName] = useState('');
@@ -66,6 +79,9 @@ const MatchesScreen = ({navigation}) => {
   const [dislikingId, setDislikingId] = useState(null);
   const [isLoadingMoreLiked, setIsLoadingMoreLiked] = useState(false);
   const [hasMoreLiked, setHasMoreLiked] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [genderFilter, setGenderFilter] = useState('all');
   const likedCursorRef = useRef(null);
   const loadingLikedRef = useRef(false);
   const loadingMoreLikedRef = useRef(false);
@@ -133,7 +149,6 @@ const MatchesScreen = ({navigation}) => {
     useCallback(() => {
       applyAppStatusBar('dark-content');
       let unsubLocal = () => {};
-      let unsubPartner = () => {};
       (async () => {
         const name = await getDisplayName();
         setLocalName(name || '');
@@ -141,34 +156,6 @@ const MatchesScreen = ({navigation}) => {
           const connection = await refreshPartnerConnection();
           setPartnerSession(connection.session);
           setPartnerLinked(!!connection.linked);
-          const session = connection.session;
-          const myUid = userId || auth().currentUser?.uid;
-          if (session?.id && myUid) {
-            unsubPartner = subscribePartnerFavorites(session.id, async docs => {
-              const partnerUid =
-                session.ownerUid === myUid
-                  ? session.partnerUid
-                  : session.ownerUid;
-              const {both} = categorizePartnerFavorites(
-                docs,
-                myUid,
-                partnerUid,
-              );
-              const all = await fetchAllBabyNames().catch(() => []);
-              const byId = new Map(all.map(n => [String(n.id), n]));
-              setBothLikeNames(
-                both.map(
-                  d =>
-                    byId.get(String(d.nameId || d.id)) || {
-                      id: d.nameId || d.id,
-                      name: d.nameId || d.id,
-                    },
-                ),
-              );
-            });
-          } else {
-            setBothLikeNames([]);
-          }
         } catch (e) {
           setPartnerSession(null);
           const linked = await isPartnerLinked();
@@ -176,37 +163,29 @@ const MatchesScreen = ({navigation}) => {
         }
       })();
       unsubLocal = subscribeLocalFavorites(() => {
-        if (tab === 'liked') {
-          void fetchLiked();
-        }
+        void fetchLiked();
       });
       return () => {
         unsubLocal();
-        unsubPartner();
       };
-    }, [userId, fetchLiked, isUserLoggedin, authDisplayName, tab]),
+    }, [fetchLiked, isUserLoggedin, authDisplayName]),
   );
 
   useEffect(() => {
-    if (tab === 'liked') {
-      fetchLiked();
-    }
-  }, [tab, fetchLiked, likeCount, dislikeCount, userId]);
+    fetchLiked();
+  }, [fetchLiked, likeCount, dislikeCount, userId]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      if (tab === 'liked') {
-        await fetchLiked();
-      } else {
-        const session = await getActivePartnerSession();
-        setPartnerSession(session);
-      }
+      await fetchLiked();
+      const session = await getActivePartnerSession();
+      setPartnerSession(session);
     } catch (e) {
       console.log(e);
     }
     setIsRefreshing(false);
-  }, [fetchLiked, tab]);
+  }, [fetchLiked]);
 
   const openDetails = useCallback(
     item => navigation.navigate('NameInformation', {item}),
@@ -246,6 +225,25 @@ const MatchesScreen = ({navigation}) => {
     }),
     [insets.bottom],
   );
+
+  const query = searchQuery.trim().toLowerCase();
+  const hasActiveFilters = query.length > 0 || genderFilter !== 'all';
+
+  const visibleNames = useMemo(() => {
+    return likedNames.filter(item => {
+      const name = String(item?.name || '');
+      if (query && !name.toLowerCase().includes(query)) {
+        return false;
+      }
+      if (genderFilter !== 'all') {
+        const gender = normalizeGender(item?.gender);
+        if (gender !== genderFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [likedNames, query, genderFilter]);
 
   const renderLikedCard = useCallback(
     ({item}) => {
@@ -287,58 +285,22 @@ const MatchesScreen = ({navigation}) => {
     [openDetails, onDislikeLiked, dislikingId],
   );
 
-  const renderMatchCard = useCallback(
-    ({item}) => {
-      const origin = item.origin || item.gender || '';
-      return (
-        <TouchableOpacity
-          style={[styles.card, styles.matchCard]}
-          activeOpacity={0.85}
-          onPress={() => openDetails(item)}>
-          <View style={styles.bothBadge}>
-            <Ionicons name="heart" size={11} color="#FFF" />
-            <Text style={styles.bothBadgeText}>Both like</Text>
-          </View>
-          <Text style={styles.cardName}>{item.name}</Text>
-          {origin ? <Text style={styles.originText}>{origin}</Text> : null}
-          <Text style={styles.meaning} numberOfLines={2}>
-            {item.meaning || 'Meaning coming soon'}
-          </Text>
-        </TouchableOpacity>
-      );
-    },
-    [openDetails],
-  );
-
-  const renderMatchesEmpty = () => (
-    <View style={styles.empty}>
-      <Ionicons
-        name="heart-dislike-outline"
-        size={42}
-        color={T.colors.primaryMuted}
-      />
-      <Text style={styles.emptyTitle}>No matches yet</Text>
-      <Text style={styles.emptySub}>
-        {partnerSession?.partnerUid
-          ? 'Keep liking names — matches appear when you both like the same one.'
-          : 'Shared matches appear when both people like the same name.'}
-      </Text>
-    </View>
-  );
-
   const renderLikedEmpty = () => (
     <View style={styles.empty}>
       <Ionicons name="heart-outline" size={40} color={T.colors.primaryMuted} />
-      <Text style={styles.emptyTitle}>No favorite names yet</Text>
+      <Text style={styles.emptyTitle}>
+        {hasActiveFilters ? 'No matching favorites' : 'No favorite names yet'}
+      </Text>
       <Text style={styles.emptySub}>
-        Start exploring names and tap ❤ to save your favorites.
+        {hasActiveFilters
+          ? 'Try a different search or filter.'
+          : 'Start exploring names and tap ❤ to save your favorites.'}
       </Text>
     </View>
   );
 
-  const modeLabel = partnerLinked || partnerSession?.partnerUid
-    ? 'with partner'
-    : 'solo mode';
+  const modeLabel =
+    partnerLinked || partnerSession?.partnerUid ? 'with partner' : 'solo mode';
   const headerName = resolveDisplayName({
     localName,
     authDisplayName,
@@ -354,78 +316,107 @@ const MatchesScreen = ({navigation}) => {
         </Text>
       </View>
 
-      <Text style={styles.title}>Matches</Text>
+      <Text style={styles.title}>I Liked</Text>
 
-      <View style={styles.tabsWrap}>
-        <SegmentedTabs options={TAB_OPTIONS} value={tab} onChange={setTab} />
-      </View>
-
-      {tab === 'matches' ? (
-        <View style={styles.flex}>
-          <FlatList
-            data={bothLikeNames}
-            keyExtractor={keyExtractor}
-            renderItem={renderMatchCard}
-            contentContainerStyle={contentPad}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={
-              bothLikeNames.length ? (
-                <Text style={styles.sectionLabel}>Both Like</Text>
-              ) : null
-            }
-            ListEmptyComponent={renderMatchesEmpty}
-            ItemSeparatorComponent={() => <View style={styles.sep} />}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                colors={[T.colors.primary]}
-                tintColor={T.colors.primary}
-              />
-            }
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={18} color={T.colors.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search liked names"
+            placeholderTextColor={T.colors.textTertiary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
           />
-        </View>
-      ) : (
-        <View style={styles.flex}>
-          <FlatList
-            data={likedNames}
-            keyExtractor={keyExtractor}
-            renderItem={renderLikedCard}
-            contentContainerStyle={contentPad}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={isLoading ? null : renderLikedEmpty}
-            ItemSeparatorComponent={() => <View style={styles.sep} />}
-            onEndReached={() => {
-              void loadMoreLiked();
-            }}
-            onEndReachedThreshold={0.45}
-            ListFooterComponent={
-              isLoadingMoreLiked ? (
-                <View style={styles.pageLoader}>
-                  <ActivityIndicator size="small" color={T.colors.primary} />
-                </View>
-              ) : hasMoreLiked && likedNames.length ? (
-                <View style={styles.pageHint}>
-                  <Text style={styles.pageHintText}>Scroll for more favorites</Text>
-                </View>
-              ) : null
-            }
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                colors={[T.colors.primary]}
-                tintColor={T.colors.primary}
-              />
-            }
-          />
-          {isLoading && likedNames.length === 0 ? (
-            <View style={styles.loader}>
-              <ActivityIndicator size="large" color={T.colors.primary} />
-            </View>
+          {searchQuery ? (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={18} color={T.colors.textTertiary} />
+            </TouchableOpacity>
           ) : null}
         </View>
-      )}
+        <TouchableOpacity
+          style={[
+            styles.filterBtn,
+            (filterOpen || genderFilter !== 'all') && styles.filterBtnActive,
+          ]}
+          onPress={() => setFilterOpen(open => !open)}
+          accessibilityRole="button"
+          accessibilityLabel="Filter liked names">
+          <Ionicons
+            name="options-outline"
+            size={20}
+            color={filterOpen || genderFilter !== 'all' ? T.colors.textOnPrimary : T.colors.textPrimary}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {filterOpen ? (
+        <View style={styles.filterPanel}>
+          <Text style={styles.filterLabel}>Gender</Text>
+          <View style={styles.filterChips}>
+            {GENDER_FILTERS.map(option => {
+              const selected = genderFilter === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.chip, selected && styles.chipSelected]}
+                  onPress={() => setGenderFilter(option.value)}>
+                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.flex}>
+        <FlatList
+          data={visibleNames}
+          keyExtractor={keyExtractor}
+          renderItem={renderLikedCard}
+          contentContainerStyle={contentPad}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={isLoading ? null : renderLikedEmpty}
+          ItemSeparatorComponent={() => <View style={styles.sep} />}
+          onEndReached={() => {
+            void loadMoreLiked();
+          }}
+          onEndReachedThreshold={0.45}
+          ListFooterComponent={
+            isLoadingMoreLiked ? (
+              <View style={styles.pageLoader}>
+                <ActivityIndicator size="small" color={T.colors.primary} />
+              </View>
+            ) : hasMoreLiked && likedNames.length ? (
+              <View style={styles.pageHint}>
+                <Text style={styles.pageHintText}>Scroll for more favorites</Text>
+              </View>
+            ) : null
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[T.colors.primary]}
+              tintColor={T.colors.primary}
+            />
+          }
+        />
+        {isLoading && likedNames.length === 0 ? (
+          <View style={styles.loader}>
+            <ActivityIndicator size="large" color={T.colors.primary} />
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 };
@@ -458,15 +449,87 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 10,
   },
-  tabsWrap: {
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 14,
-    marginBottom: 12,
-  },
-  sectionLabel: {
-    fontFamily: Fonts.bold,
-    fontSize: 14,
-    color: T.colors.primary,
     marginBottom: 10,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: T.colors.surface,
+    borderWidth: 1,
+    borderColor: T.colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: Fonts.regular,
+    fontSize: 14,
+    color: T.colors.textPrimary,
+    paddingVertical: 8,
+  },
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.colors.surface,
+    borderWidth: 1,
+    borderColor: T.colors.border,
+  },
+  filterBtnActive: {
+    backgroundColor: T.colors.primary,
+    borderColor: T.colors.primary,
+  },
+  filterPanel: {
+    marginHorizontal: 14,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: T.colors.surface,
+    borderWidth: 1,
+    borderColor: T.colors.border,
+  },
+  filterLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: 12,
+    color: T.colors.textSecondary,
+    marginBottom: 8,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  filterChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: T.colors.background,
+    borderWidth: 1,
+    borderColor: T.colors.border,
+  },
+  chipSelected: {
+    backgroundColor: T.colors.primary,
+    borderColor: T.colors.primary,
+  },
+  chipText: {
+    fontFamily: Fonts.semibold,
+    fontSize: 13,
+    color: T.colors.textPrimary,
+  },
+  chipTextSelected: {
+    color: T.colors.textOnPrimary,
   },
   card: {
     backgroundColor: T.colors.surface,
@@ -490,29 +553,6 @@ const styles = StyleSheet.create({
   },
   dislikeBtnBusy: {
     opacity: 0.7,
-  },
-  matchCard: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,107,107,0.35)',
-    flexDirection: 'column',
-    alignItems: 'stretch',
-  },
-  bothBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: T.colors.primary,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 8,
-  },
-  bothBadgeText: {
-    fontFamily: Fonts.bold,
-    fontSize: 10,
-    color: '#FFF',
-    letterSpacing: 0.3,
   },
   cardName: {
     fontFamily: Fonts.bold,
