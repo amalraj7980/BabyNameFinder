@@ -9,6 +9,8 @@ import {
   collection,
   doc,
   serverTimestamp as firestoreServerTimestamp,
+  writeBatch as writeBatchModular,
+  setDoc as setDocModular,
 } from '@react-native-firebase/firestore';
 import {
   FIRESTORE_COLLECTIONS,
@@ -17,10 +19,21 @@ import {
 
 export const getFirestore = () => getFirestoreModular(getApp());
 
+export const createWriteBatch = () => writeBatchModular(getFirestore());
+
+export const setDocument = (ref, data, options) =>
+  options ? setDocModular(ref, data, options) : setDocModular(ref, data);
+
 export const serverTimestamp = () => firestoreServerTimestamp();
 
 export const userDocument = uid =>
   doc(collection(getFirestore(), FIRESTORE_COLLECTIONS.users), uid);
+
+export const userFavoritesCollection = uid =>
+  collection(userDocument(uid), 'favorites');
+
+export const userFavoriteDocument = (uid, nameId) =>
+  doc(userFavoritesCollection(uid), String(nameId));
 
 export const usernameDocument = usernameLower =>
   doc(

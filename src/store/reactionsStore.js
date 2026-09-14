@@ -3,7 +3,6 @@
  * UI reads and writes are synchronous (0 ms). Persistence and cloud sync
  * run in the background and never block the tap/swipe path.
  */
-import {InteractionManager} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const FAVORITE_IDS_KEY = '@babynames/favorite_names';
@@ -113,6 +112,16 @@ const emit = () => {
   });
 };
 
+const runWhenIdle = task => {
+  if (typeof global.requestIdleCallback === 'function') {
+    global.requestIdleCallback(() => {
+      task();
+    });
+    return;
+  }
+  setTimeout(task, 32);
+};
+
 const schedulePersist = () => {
   persistQueued = true;
   if (persistTimer || persistRunning) {
@@ -120,7 +129,7 @@ const schedulePersist = () => {
   }
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    InteractionManager.runAfterInteractions(() => {
+    runWhenIdle(() => {
       void persistNow();
     });
   }, 24);
@@ -482,5 +491,35 @@ export const hydrateReactionsStore = () => {
 };
 
 export const flushReactionsPersist = () => persistNow();
+
+export const clearLocalReactions = async () => {
+  if (hydratePromise) {
+    await hydratePromise.catch(() => {});
+  }
+  likes.clear();
+  dislikes.clear();
+  likeOrder = [];
+  dislikeOrder = [];
+  emit();
+  await persistNow();
+};
+
+export const replaceLikeRecords = async (records = []) => {
+  if (hydratePromise) {
+    await hydratePromise.catch(() => {});
+  }
+  likes.clear();
+  likeOrder = [];
+  (records || []).forEach(item => {
+    const record = toNameRecord(item?.id || item?.nameId, item);
+    if (!record.id) {
+      return;
+    }
+    likes.set(record.id, record);
+    likeOrder.push(record.id);
+  });
+  emit();
+  await persistNow();
+};
 
 export {normalizeGender as normalizeReactionGender};

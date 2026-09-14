@@ -4,15 +4,16 @@
  * and never block the UI.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
 import NetInfo from '@react-native-community/netinfo';
 import {
   likedNameDocument,
   dislikedNameDocument,
+  userFavoriteDocument,
   serverTimestamp,
   resolveReactionUserId,
+  createWriteBatch,
 } from '../firebase/firestore';
+import {getCurrentUser} from '../firebase/auth';
 import {markPartnerFavorite} from './partner.service';
 import {
   applyLike,
@@ -33,13 +34,6 @@ const PENDING_DISLIKES_KEY = '@babynames/pending_dislikes_v1';
 const PENDING_UNLIKES_KEY = '@babynames/pending_unlikes_v1';
 const PENDING_UNDISLIKES_KEY = '@babynames/pending_undislikes_v1';
 
-const userFavoriteDoc = (uid, nameId) =>
-  firestore()
-    .collection('users')
-    .doc(String(uid))
-    .collection('favorites')
-    .doc(String(nameId));
-
 let likesQueue = {};
 let dislikesQueue = {};
 let unlikesQueue = {};
@@ -52,6 +46,7 @@ let retryTimer = null;
 let backoffMs = MIN_BACKOFF_MS;
 let syncPausedForAuth = false;
 let netInfoBound = false;
+let lastFlushError = '';
 
 const isPermanentAuthError = error => {
   const code = String(error?.code || error?.message || '').toLowerCase();
@@ -63,9 +58,22 @@ const isPermanentAuthError = error => {
   );
 };
 
+const isNonRetryableSyncError = error => {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    isPermanentAuthError(error) ||
+    message.includes('is not a function') ||
+    message.includes('is not a constructor')
+  );
+};
+
 export const canSyncReactionsToCloud = () => {
-  const user = auth().currentUser;
-  return Boolean(user && !user.isAnonymous);
+  try {
+    const user = getCurrentUser();
+    return Boolean(user && !user.isAnonymous);
+  } catch (e) {
+    return false;
+  }
 };
 
 const readQueue = async key => {
@@ -213,7 +221,7 @@ export const enqueuePendingUndislike = nameId => {
 const flushMapInChunks = async (entries, writer) => {
   for (let i = 0; i < entries.length; i += 400) {
     const slice = entries.slice(i, i + 400);
-    const batch = firestore().batch();
+    const batch = createWriteBatch();
     slice.forEach(([id, data]) => writer(batch, id, data));
     await batch.commit();
   }
@@ -254,7 +262,7 @@ export const flushPendingReactions = async ({
     return {flushedLikes: 0, flushedDislikes: 0, offline: true};
   }
 
-  const uid = resolveReactionUserId(userId) || auth().currentUser?.uid;
+  const uid = resolveReactionUserId(userId) || getCurrentUser()?.uid;
   if (!uid) {
     return {flushedLikes: 0, flushedDislikes: 0, offline: true};
   }
@@ -291,7 +299,7 @@ export const flushPendingReactions = async ({
           merge: true,
         });
         batch.delete(dislikedNameDocument(uid, id));
-        batch.set(userFavoriteDoc(uid, id), favPayload(id), {merge: true});
+        batch.set(userFavoriteDocument(uid, id), favPayload(id), {merge: true});
       });
       for (const [id] of likeEntries) {
         await markPartnerFavorite(id, true).catch(() => {});
@@ -306,7 +314,7 @@ export const flushPendingReactions = async ({
           merge: true,
         });
         batch.delete(likedNameDocument(uid, id));
-        batch.delete(userFavoriteDoc(uid, id));
+        batch.delete(userFavoriteDocument(uid, id));
       });
       for (const [id] of dislikeEntries) {
         await markPartnerFavorite(id, false).catch(() => {});
@@ -320,7 +328,7 @@ export const flushPendingReactions = async ({
         unlikeIds.map(id => [id, true]),
         (batch, id) => {
           batch.delete(likedNameDocument(uid, id));
-          batch.delete(userFavoriteDoc(uid, id));
+          batch.delete(userFavoriteDocument(uid, id));
         },
       );
       for (const id of unlikeIds) {
@@ -344,16 +352,23 @@ export const flushPendingReactions = async ({
     await persistQueues();
     backoffMs = MIN_BACKOFF_MS;
     syncPausedForAuth = false;
+    lastFlushError = '';
   } catch (e) {
-    console.warn('flushPendingReactions failed:', e?.message || e);
-    if (isPermanentAuthError(e)) {
+    const message = String(e?.message || e || 'unknown');
+    if (message !== lastFlushError) {
+      lastFlushError = message;
+      console.warn('flushPendingReactions failed:', message);
+    }
+    if (isNonRetryableSyncError(e)) {
       syncPausedForAuth = true;
-      rollbackPermanentFailures({
-        likeEntries,
-        dislikeEntries,
-        unlikeIds,
-        undislikeIds,
-      });
+      if (isPermanentAuthError(e)) {
+        rollbackPermanentFailures({
+          likeEntries,
+          dislikeEntries,
+          unlikeIds,
+          undislikeIds,
+        });
+      }
     } else {
       scheduleRetry(userId);
     }

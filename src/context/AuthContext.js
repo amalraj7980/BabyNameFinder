@@ -172,17 +172,17 @@ export const AuthContextProvider = ({children}) => {
 
   const logoutUser = async () => {
     try {
-      try {
-        const {flushPendingReactions} = require('../services/reactionBatch.service');
-        await flushPendingReactions({force: true});
-      } catch (e) {
-        console.warn('Flush before logout skipped:', e?.message || e);
-      }
       const session = await logoutFirebase();
       await applySession(session);
       setLoginOccurred(false);
     } catch (e) {
       console.log('Firebase logout error:', e);
+      try {
+        const {clearSignedInLocalUserData} = require('../services/reactions.service');
+        await clearSignedInLocalUserData();
+      } catch (clearError) {
+        // ignore
+      }
       Storage.logOut();
       setVal({...initialAuthState, authStateLoading: false});
     }

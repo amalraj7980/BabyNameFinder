@@ -65,6 +65,13 @@ export const syncPartnerLocalState = async session => {
   return {linked, joinCode, waiting, session};
 };
 
+export const clearLocalPartnerState = async () => {
+  await cacheSessionId(null);
+  await setPartnerLinked(false);
+  await setPartnerCode('');
+  await setInviteSent(false);
+};
+
 export const refreshPartnerConnection = async () => {
   try {
     await ensureAuthUid();

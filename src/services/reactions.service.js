@@ -36,7 +36,7 @@ import {
   patchReactionRecord,
   toNameRecord,
 } from '../store/reactionsStore';
-import auth from '@react-native-firebase/auth';
+import {getCurrentUser} from '../firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const mapReactionDoc = d => {
@@ -77,7 +77,7 @@ const pullAnonymousCloudOnce = async () => {
   if (canSyncReactionsToCloud()) {
     return;
   }
-  const uid = auth().currentUser?.uid;
+  const uid = getCurrentUser()?.uid;
   if (!uid) {
     return;
   }
@@ -110,6 +110,36 @@ export const startReactionsSystem = async () => {
     return;
   }
   void pullAnonymousCloudOnce();
+};
+
+export const resetCloudReactionHydration = () => {
+  cloudHydrateUid = null;
+  cloudHydratePromise = null;
+};
+
+export const clearSignedInLocalUserData = async () => {
+  const {clearPendingQueues} = require('./reactionBatch.service');
+  const {clearLocalReactions} = require('../store/reactionsStore');
+  await clearPendingQueues();
+  await clearLocalReactions();
+  resetCloudReactionHydration();
+  try {
+    const {resetGuestLikeMergeGuard} = require('./favorites.service');
+    resetGuestLikeMergeGuard();
+  } catch (e) {
+    // ignore
+  }
+  try {
+    await AsyncStorage.removeItem(GUEST_CLOUD_PULL_KEY);
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const {clearLocalPartnerState} = require('./partner.service');
+    await clearLocalPartnerState();
+  } catch (e) {
+    // ignore
+  }
 };
 
 export const hydrateCloudReactions = async userId => {

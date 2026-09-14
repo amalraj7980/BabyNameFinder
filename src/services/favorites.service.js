@@ -1,17 +1,19 @@
 /**
  * Unified favorites — guest local + logged-in cloud (reactions likes + users/favorites).
  */
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import {getCurrentUser} from '../firebase/auth';
 import {
   likedNamesCollection,
-  dislikedNamesCollection,
   likedNameDocument,
   babyNameDocument,
   mapNameDoc,
   serverTimestamp,
+  userFavoritesCollection,
+  userFavoriteDocument,
+  userDocument,
+  createWriteBatch,
+  setDocument,
 } from '../firebase/firestore';
-import {FIRESTORE_COLLECTIONS as COLLECTIONS} from '../firebase/config';
 import {fetchAllBabyNames} from './babyNames.service';
 import {
   getLocalFavoriteIds,
@@ -20,18 +22,10 @@ import {
 } from './localFavorites.service';
 import {
   hydrateReactionsStore,
-  mergeCloudRecords,
   getLikeRecords,
+  replaceLikeRecords,
 } from '../store/reactionsStore';
-
-const userFavoritesCollection = uid =>
-  firestore()
-    .collection(COLLECTIONS.users)
-    .doc(String(uid))
-    .collection('favorites');
-
-const userFavoriteDocument = (uid, nameId) =>
-  userFavoritesCollection(uid).doc(String(nameId));
+import {getDocs} from '@react-native-firebase/firestore';
 
 const resolveNamesByIds = async ids => {
   const unique = [...new Set((ids || []).map(String))];
@@ -69,8 +63,8 @@ export const getCloudFavoriteIds = async uid => {
   }
   try {
     const [likesSnap, favSnap] = await Promise.all([
-      likedNamesCollection(uid).get().catch(() => null),
-      userFavoritesCollection(uid).get().catch(() => null),
+      getDocs(likedNamesCollection(uid)).catch(() => null),
+      getDocs(userFavoritesCollection(uid)).catch(() => null),
     ]);
     const ids = new Set();
     likesSnap?.docs?.forEach(d => {
@@ -106,62 +100,145 @@ export const addCloudFavorite = async (uid, nameId, nameData = {}) => {
     syllableCount: nameData.syllableCount || 1,
     createdAt: serverTimestamp(),
   };
-  const batch = firestore().batch();
+  const batch = createWriteBatch();
   batch.set(userFavoriteDocument(uid, id), payload, {merge: true});
   batch.set(likedNameDocument(uid, id), likePayload, {merge: true});
   await batch.commit();
 };
 
+let guestLikeMergeUid = null;
+let guestLikeMergeInFlight = null;
+
+export const resetGuestLikeMergeGuard = () => {
+  guestLikeMergeUid = null;
+  guestLikeMergeInFlight = null;
+};
+
+const mapLikeDoc = docSnap => {
+  const data = docSnap.data() || {};
+  return {
+    id: String(data.nameId || docSnap.id),
+    name: data.name || '',
+    gender: data.gender || '',
+    origin: data.origin || '',
+    meaning: data.meaning || '',
+    syllables: data.syllables || '',
+    syllableCount: data.syllableCount || 1,
+  };
+};
+
 /**
- * Merge local guest likes/dislikes into the authenticated account.
- * Local store stays as the cache; cloud write is a single background batch.
+ * After guest → Google/email login: fetch account likes, upload only local
+ * guest likes that are missing, then replace the temporary guest list.
  */
 export const migrateLocalFavoritesToAccount = async uid => {
-  if (!uid) {
+  const userId = String(uid || '');
+  if (!userId) {
     return {merged: 0};
   }
-  await hydrateReactionsStore();
-  const {
-    enqueueLocalStoreForAccountMerge,
-    flushPendingReactions,
-    resumeReactionSync,
-  } = require('./reactionBatch.service');
-  const merged = await enqueueLocalStoreForAccountMerge();
-  resumeReactionSync();
-  void flushPendingReactions({userId: uid, force: true});
-  return {merged, total: merged};
+  if (guestLikeMergeUid === userId) {
+    return {merged: 0, skipped: true};
+  }
+  if (guestLikeMergeInFlight) {
+    return guestLikeMergeInFlight;
+  }
+
+  guestLikeMergeInFlight = (async () => {
+    await hydrateReactionsStore();
+    const guestLikes = getLikeRecords();
+
+    let likesSnap = null;
+    let favSnap = null;
+    try {
+      [likesSnap, favSnap] = await Promise.all([
+        getDocs(likedNamesCollection(userId)),
+        getDocs(userFavoritesCollection(userId)).catch(() => null),
+      ]);
+    } catch (e) {
+      console.warn('Fetch account likes failed:', e?.message || e);
+      throw e;
+    }
+
+    const cloudRecords = [];
+    const cloudIds = new Set();
+    likesSnap?.docs?.forEach(docSnap => {
+      if (docSnap.id === '_meta') {
+        return;
+      }
+      cloudIds.add(String(docSnap.id));
+      cloudRecords.push(mapLikeDoc(docSnap));
+    });
+    favSnap?.docs?.forEach(docSnap => {
+      if (docSnap.id !== '_meta') {
+        cloudIds.add(String(docSnap.id));
+      }
+    });
+
+    const toAdd = guestLikes.filter(
+      record => record?.id && !cloudIds.has(String(record.id)),
+    );
+
+    for (let i = 0; i < toAdd.length; i += 400) {
+      const slice = toAdd.slice(i, i + 400);
+      const batch = createWriteBatch();
+      slice.forEach(record => {
+        const id = String(record.id);
+        batch.set(
+          userFavoriteDocument(userId, id),
+          {
+            nameId: id,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+          {merge: true},
+        );
+        batch.set(
+          likedNameDocument(userId, id),
+          {
+            nameId: id,
+            name: record.name || '',
+            gender: record.gender || '',
+            origin: record.origin || '',
+            meaning: record.meaning || '',
+            syllables: record.syllables || '',
+            syllableCount: record.syllableCount || 1,
+            createdAt: serverTimestamp(),
+          },
+          {merge: true},
+        );
+      });
+      await batch.commit();
+    }
+
+    const mergedById = new Map();
+    cloudRecords.forEach(record => {
+      mergedById.set(String(record.id), record);
+    });
+    toAdd.forEach(record => {
+      mergedById.set(String(record.id), record);
+    });
+    await replaceLikeRecords([...mergedById.values()]);
+
+    try {
+      const {clearPendingQueues} = require('./reactionBatch.service');
+      await clearPendingQueues();
+    } catch (e) {
+      // ignore
+    }
+
+    guestLikeMergeUid = userId;
+    return {merged: toAdd.length, existing: cloudIds.size};
+  })().finally(() => {
+    guestLikeMergeInFlight = null;
+  });
+
+  return guestLikeMergeInFlight;
 };
 
 /** Copy reactions from previous anonymous uid into new uid, then migrate local. */
 export const migrateGuestDataToAccount = async (fromUid, toUid) => {
   if (!toUid) {
     return {merged: 0};
-  }
-  if (fromUid && fromUid !== toUid) {
-    try {
-      const [likesSnap, dislikesSnap] = await Promise.all([
-        likedNamesCollection(fromUid).get(),
-        dislikedNamesCollection(fromUid).get().catch(() => ({docs: []})),
-      ]);
-      mergeCloudRecords(
-        'like',
-        likesSnap.docs
-          .filter(d => d.id !== '_meta')
-          .map(d => {
-            const data = d.data() || {};
-            return {id: d.id, ...data};
-          }),
-      );
-      mergeCloudRecords(
-        'dislike',
-        (dislikesSnap.docs || []).map(d => {
-          const data = d.data() || {};
-          return {id: d.id, ...data};
-        }),
-      );
-    } catch (e) {
-      console.warn('Anon reaction migrate skipped:', e?.message || e);
-    }
   }
   return migrateLocalFavoritesToAccount(toUid);
 };
@@ -172,11 +249,11 @@ export const migrateGuestDataToAccount = async (fromUid, toUid) => {
  * in Console even before the first like.
  */
 export const ensureCloudFavoritesForUser = async uid => {
-  const userId = String(uid || auth().currentUser?.uid || '');
+  const current = getCurrentUser();
+  const userId = String(uid || current?.uid || '');
   if (!userId) {
     return {ok: false, merged: 0};
   }
-  const current = auth().currentUser;
   if (!current || current.isAnonymous) {
     return {ok: false, merged: 0, guest: true};
   }
@@ -204,7 +281,8 @@ export const ensureCloudFavoritesForUser = async uid => {
   }
 
   try {
-    await userFavoriteDocument(userId, '_meta').set(
+    await setDocument(
+      userFavoriteDocument(userId, '_meta'),
       {
         nameId: '_meta',
         initialized: true,
@@ -218,16 +296,14 @@ export const ensureCloudFavoritesForUser = async uid => {
   }
 
   try {
-    await firestore()
-      .collection(COLLECTIONS.users)
-      .doc(userId)
-      .set(
-        {
-          favoritesSyncedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        {merge: true},
-      );
+    await setDocument(
+      userDocument(userId),
+      {
+        favoritesSyncedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      {merge: true},
+    );
   } catch (e) {
     console.warn('ensureCloudFavorites user stamp failed:', e?.message || e);
   }

@@ -430,6 +430,30 @@ export const refreshAuthUser = async () => {
 
 /** Logout email/Google user, then restore anonymous guest session. */
 export const logoutFirebase = async () => {
+  const user = getCurrentUser();
+  const wasSignedIn = Boolean(user && !user.isAnonymous);
+
+  if (wasSignedIn) {
+    try {
+      const {flushPendingReactions} = require('./reactionBatch.service');
+      await flushPendingReactions({force: true});
+    } catch (e) {
+      console.warn('Flush before logout skipped:', e?.message || e);
+    }
+    try {
+      const {clearSignedInLocalUserData} = require('./reactions.service');
+      await clearSignedInLocalUserData();
+    } catch (e) {
+      console.warn('Clear local data on logout skipped:', e?.message || e);
+    }
+    try {
+      const {Storage} = require('../util');
+      await Storage.logOut();
+    } catch (e) {
+      // ignore
+    }
+  }
+
   try {
     await signOutFromGoogle();
   } catch (e) {
