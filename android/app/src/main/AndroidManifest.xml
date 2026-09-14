@@ -58,6 +58,15 @@
             android:host="auth"
             android:scheme="babynames" />
         </intent-filter>
+        <!-- Shared name links: open Discover (home) when the app is already installed -->
+        <intent-filter>
+          <action android:name="android.intent.action.VIEW" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <category android:name="android.intent.category.BROWSABLE" />
+          <data
+            android:host="home"
+            android:scheme="babynames" />
+        </intent-filter>
       </activity>
     </application>
 </manifest>

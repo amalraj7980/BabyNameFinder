@@ -15,7 +15,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
-import Share from 'react-native-share';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import {Colors} from '../../styles';
@@ -30,6 +29,7 @@ import {
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
 import {Storage} from '../../util';
+import {shareBabyName} from '../../services/shareBabyName';
 import CustomPopup from '../../components/CustomPopup';
 import useBackExit from '../../hooks/useBackExit';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -266,18 +266,8 @@ const BabyNamesScreen = ({navigation, route}) => {
     }
   }, [userId, setBabyNamesCount, setIsUndoEnabled]);
 
-  const shareNameList = useCallback(async name => {
-    const encodedName = encodeURIComponent(name);
-    const shareLink = `https://forking.riafy.in/babyname/babyName/details/${encodedName}`;
-    try {
-      await Share.open({
-        title: 'Share via',
-        message: `Hey! I've shortlisted the baby name "${name}". Discover more about it by clicking the link.`,
-        url: shareLink,
-      });
-    } catch (error) {
-      // user cancelled share — ignore
-    }
+  const shareNameList = useCallback(name => {
+    void shareBabyName(name);
   }, []);
 
   const openNameDetails = useCallback(

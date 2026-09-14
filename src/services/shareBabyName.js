@@ -1,16 +1,39 @@
 import Share from 'react-native-share';
 
+import {ANDROID_PACKAGE_NAME} from '../firebase/config';
+import {NAME_SHARE_PAGE_URL} from '../constants/appInfo';
+
+/** Play Store listing — installs the app, or opens it when already installed. */
+export const APP_INSTALL_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}`;
+
+export function getBabyNameShareUrl(name) {
+  return `${NAME_SHARE_PAGE_URL}?name=${encodeURIComponent(name)}`;
+}
+
+export function buildBabyNameShareMessage(name) {
+  const shareUrl = getBabyNameShareUrl(name);
+  return [
+    '🌟 *A special name has been shortlisted!* 👶',
+    '',
+    `✨ *${name}*`,
+    '',
+    'Curious about the *meaning, origin & details* behind this name?',
+    'Tap below to discover more! 💫',
+    '',
+    `🔗 ${shareUrl}`,
+    '',
+    '❤️ Like the name? Share your thoughts!',
+  ].join('\n');
+}
+
 export async function shareBabyName(name) {
   if (!name) {
     return;
   }
-  const encodedName = encodeURIComponent(name);
-  const shareLink = `https://forking.riafy.in/babyname/babyName/details/${encodedName}`;
   try {
     await Share.open({
       title: 'Share via',
-      message: `Hey! I've shortlisted the baby name "${name}". Discover more about it by clicking the link.`,
-      url: shareLink,
+      message: buildBabyNameShareMessage(name),
     });
   } catch (error) {
     // user cancelled share — ignore

@@ -9,4 +9,6 @@ export const IOS_APP_STORE_ID = '';
 export const PRIVACY_POLICY_URL =
   'https://amalraj7980.github.io/BabyNames-Privacy-Policy/index.html';
 export const TERMS_OF_USE_URL =
-  'https://amalraj7980.github.io/BabyNames-Privacy-Policy/index.html';
+  'https://amalraj7980.github.io/BabyNames-Privacy-Policy/terms-of-use.html';
+export const NAME_SHARE_PAGE_URL =
+  'https://amalraj7980.github.io/BabyNames-Privacy-Policy/share.html';

@@ -261,8 +261,8 @@ const PreferencesScreen = ({navigation}) => {
         return;
       }
       if (key === 'help') {
-        Linking.openURL('mailto:support@babynamestogether.app').catch(() => {
-          Alert.alert('Help & Support', 'Email support@babynamestogether.app');
+        Linking.openURL('mailto:careermateai.support@gmail.com').catch(() => {
+          Alert.alert('Help & Support', 'Email careermateai.support@gmail.com');
         });
         return;
       }

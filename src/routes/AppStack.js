@@ -21,7 +21,7 @@ import InAppPurchase from '../screens/premium/InAppPurchase';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import Share from 'react-native-share';
+import {shareBabyName} from '../services/shareBabyName';
 import {Storage} from '../util';
 import {getTotalNamesCount} from '../api';
 import {
@@ -106,18 +106,8 @@ const AppStack = ({navigation}) => {
     }
   }, [navigation, setIsPrime]);
 
-  const shareNameList = useCallback(async name => {
-    const encodedName = encodeURIComponent(name);
-    const shareLink = `https://forking.riafy.in/babyname/babyName/details/${encodedName}`;
-    try {
-      await Share.open({
-        title: 'Share via',
-        message: `Hey! I've shortlisted the baby name "${name}". Discover more about it by clicking the link.`,
-        url: shareLink,
-      });
-    } catch (error) {
-      // cancelled
-    }
+  const shareNameList = useCallback(name => {
+    void shareBabyName(name);
   }, []);
 
   const openDrawer = useCallback(() => {

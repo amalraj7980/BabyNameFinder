@@ -3,6 +3,7 @@ import {AUTH_DEEP_LINK_PREFIXES} from '../firebase/config';
 export const prefixes = [
   'https://lily.ria.rocks',
   ...AUTH_DEEP_LINK_PREFIXES,
+  'babynames://',
 ];
 
 export const linkingConfig = {
@@ -10,8 +11,14 @@ export const linkingConfig = {
   config: {
     screens: {
       MainTabs: {
+        path: 'home',
         screens: {
-          Discover: 'discover',
+          Discover: {
+            path: '',
+            screens: {
+              DiscoverHome: '',
+            },
+          },
           Matches: 'matches',
           Preferences: 'preferences',
         },
