@@ -8,6 +8,8 @@ buildscript {
         kotlinVersion = "2.1.20"
         // Play Billing for react-native-iap (play flavor)
         googlePlayBillingVersion = "7.1.1"
+        playBillingSdkVersion = "7.1.1"
+        playServicesVersion = "18.10.1"
     }
     repositories {
         google()
@@ -17,7 +19,7 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
-        classpath("com.google.gms:google-services:4.4.2")
+        classpath("com.google.gms:google-services:4.5.0")
     }
 }
 
