@@ -11,7 +11,6 @@ export function getBabyNameShareUrl(name) {
 }
 
 export function buildBabyNameShareMessage(name) {
-  const shareUrl = getBabyNameShareUrl(name);
   return [
     '🌟 *A special name has been shortlisted!* 👶',
     '',
@@ -20,7 +19,7 @@ export function buildBabyNameShareMessage(name) {
     'Curious about the *meaning, origin & details* behind this name?',
     'Tap below to discover more! 💫',
     '',
-    `🔗 ${shareUrl}`,
+    `🔗 ${getBabyNameShareUrl(name)}`,
     '',
     '❤️ Like the name? Share your thoughts!',
   ].join('\n');
