@@ -74,10 +74,7 @@ export const getExcludeReactionsPage = async (filters = {}) => {
   // Local likes/dislikes apply to guests and signed-in users. Always merge the
   // live store with any session/page cache so already-swiped names stay hidden.
   const {allIds: liveIds} = await getReactedNameIds();
-  const extraIds = [
-    ...(Array.isArray(filters.reactedIds) ? filters.reactedIds : []),
-    ...(Array.isArray(filters.excludeIds) ? filters.excludeIds : []),
-  ];
+  const extraIds = Array.isArray(filters.reactedIds) ? filters.reactedIds : [];
   const allIds = [
     ...new Set([...liveIds, ...extraIds].map(String).filter(Boolean)),
   ];
@@ -87,8 +84,14 @@ export const getExcludeReactionsPage = async (filters = {}) => {
 
 export const getAllBabyNames = async (filters = {}) => getBabyNames(filters);
 
-export const getFilteredNamesCount = async (filters = {}) =>
-  getBabyNamesFilteredCount(filters);
+export const getFilteredNamesCount = async (filters = {}) => {
+  const {allIds: liveIds} = await getReactedNameIds();
+  const extraIds = Array.isArray(filters.reactedIds) ? filters.reactedIds : [];
+  const allIds = [
+    ...new Set([...liveIds, ...extraIds].map(String).filter(Boolean)),
+  ];
+  return getBabyNamesFilteredCount(filters, allIds);
+};
 
 export const getReactions = async (userId, filters = {}) =>
   getUserReactions(userId, filters);

@@ -389,28 +389,39 @@ const DiscoverScreen = ({navigation}) => {
           return;
         }
 
-        const namesCount = Number(countResponse?.namesCount);
+        const pageCount = Number(response?.namesCount);
+        const countApiCount = Number(countResponse?.namesCount);
+        const exactFilteredTotal = Number.isFinite(countApiCount)
+          ? countApiCount
+          : pageCount;
         const hasExactFilteredCount =
           filtering &&
-          countResponse?.exact === true &&
-          Number.isFinite(namesCount);
+          Number.isFinite(exactFilteredTotal) &&
+          (countResponse?.exact === true || response?.exact === true);
         if (filtering) {
-          setFilteredCount(hasExactFilteredCount ? namesCount : null);
+          setFilteredCount(
+            hasExactFilteredCount ? Math.max(0, exactFilteredTotal) : null,
+          );
           setFilteredCountExact(hasExactFilteredCount);
-        } else if (Number.isFinite(namesCount)) {
-          catalogCountRef.current = namesCount;
+        } else if (Number.isFinite(Number(countResponse?.namesCount))) {
+          catalogCountRef.current = Number(countResponse.namesCount);
           setFilteredCount(null);
           setFilteredCountExact(false);
         }
         const reacted = new Set(
           (response.reactedIds || []).map(id => String(id)),
         );
-        const names = (response.babyNames || []).filter(item => {
+        let names = (response.babyNames || []).filter(item => {
           const id = cardIdentity(item);
           return Boolean(id) && !reacted.has(id);
         });
+        if (filtering && hasExactFilteredCount) {
+          names = names.slice(0, Math.max(0, exactFilteredTotal));
+        }
         const count =
-          !filtering && Number.isFinite(namesCount) ? namesCount : undefined;
+          !filtering && Number.isFinite(Number(countResponse?.namesCount))
+            ? Number(countResponse.namesCount)
+            : undefined;
 
         if (silent) {
           const idx = cardIndexRef.current;
@@ -436,8 +447,10 @@ const DiscoverScreen = ({navigation}) => {
           void Storage.setBabyNamesCount(count);
         }
         nextCursorRef.current = response.nextCursor;
-        hasMorePagesRef.current = !!response.hasMore;
-        setHasMorePages(!!response.hasMore);
+        hasMorePagesRef.current = filtering && hasExactFilteredCount
+          ? names.length < exactFilteredTotal && !!response.hasMore
+          : !!response.hasMore;
+        setHasMorePages(hasMorePagesRef.current);
         reactedIdsRef.current = response.reactedIds || [];
         hasLoadedOnceRef.current = true;
         setHasLoadedOnce(true);
@@ -870,22 +883,23 @@ const DiscoverScreen = ({navigation}) => {
       ? Math.max(0, babyNamesCount)
       : babyNamesData.length;
   const hasActiveFilters = hasSelectedFilters(seachfilterData);
-  const filteredReadyCount = babyNamesData.length;
+  const exactFilteredCount =
+    hasActiveFilters &&
+    filteredCountExact &&
+    Number.isFinite(filteredCount)
+      ? Math.max(0, filteredCount)
+      : null;
   const countLabel = hasActiveFilters
-    ? filteredCountExact
-      ? filteredCount === 1
-        ? 'matching name'
-        : 'matching names'
-      : filteredReadyCount === 1
-      ? 'matching name ready'
-      : 'matching names ready'
+    ? exactFilteredCount === 1
+      ? 'matching name'
+      : 'matching names'
     : catalogCount === 1
       ? 'name in our catalog'
       : 'names in our catalog';
   const countDisplay = hasActiveFilters
-    ? filteredCountExact
-      ? filteredCount.toLocaleString('en-US')
-      : filteredReadyCount.toLocaleString('en-US')
+    ? exactFilteredCount == null
+      ? '…'
+      : exactFilteredCount.toLocaleString('en-US')
     : catalogCount.toLocaleString('en-US');
   const clearFilters = useCallback(() => {
     setSeachfilterData(prev => ({

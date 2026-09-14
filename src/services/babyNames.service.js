@@ -39,6 +39,36 @@ export const BABY_NAMES_PAGE_SIZE = 20;
 const CLIENT_FILTER_SCAN_SIZE = 100;
 const MAX_CLIENT_FILTER_SCAN_WINDOWS = 3;
 
+let filteredDiscoverCache = {
+  signature: null,
+  names: [],
+  promise: null,
+};
+
+const resetFilteredDiscoverCache = () => {
+  filteredDiscoverCache = {
+    signature: null,
+    names: [],
+    promise: null,
+  };
+};
+
+const makeFilterSignature = filters =>
+  JSON.stringify({
+    startWith: (filters.startWith || '').toString().trim().toLowerCase(),
+    endsWith: (filters.endsWith || '').toString().trim().toLowerCase(),
+    contains: (filters.contains || '').toString().trim().toLowerCase(),
+    originQuery: (filters.originQuery || '').toString().trim().toLowerCase(),
+    compoundName: filters.compoundName === true || filters.compoundName === 'true',
+    gender: normalizeGenderFilter(filters.gender),
+    nameLength: normalizeNameLength(filters.nameLength),
+    style: normalizeNameStyle(filters.style),
+    origins: Array.isArray(filters.origins)
+      ? [...filters.origins].map(String).filter(Boolean).sort()
+      : [],
+    origin: filters.origin && filters.origin !== 'all' ? String(filters.origin) : '',
+  });
+
 const mapAndDedupeNames = docs => {
   const mapped = docs.map(mapNameDoc);
   const seen = new Set();
@@ -308,51 +338,204 @@ const toPageCursor = (docSnap, useNamePrefix) =>
     ? {name: String(docSnap.data()?.name || ''), id: docSnap.id}
     : docSnap.id;
 
-/**
- * Returns an exact aggregate count when every selected predicate is supported
- * by Firestore. Free-text, suffix, length, and compound filters are evaluated
- * locally, so the UI intentionally treats their count as unresolved instead
- * of incorrectly claiming that the visible 20-card page is the total.
- */
-export const getBabyNamesFilteredCount = async (filters = {}) => {
-  if (requiresClientSideScan(filters)) {
-    return {namesCount: null, exact: false};
+const cursorId = cursor => {
+  if (!cursor) {
+    return '';
+  }
+  if (typeof cursor === 'object') {
+    return String(cursor.id || '');
+  }
+  return String(cursor);
+};
+
+const collectFilteredBabyNames = async filters => {
+  if (cachedNames && cachedNames.length > 0) {
+    const seen = new Set();
+    return applyFilters(cachedNames, filters).filter(item => {
+      const id = String(item?.id || '');
+      if (!id || seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return true;
+    });
   }
 
-  const constraints = [];
+  const matches = [];
+  const seen = new Set();
+  let cursor = null;
+  let hasMore = true;
   const gender = normalizeGenderFilter(filters.gender);
   const style = normalizeNameStyle(filters.style);
   const originQueryTags = resolveOriginQueryTags(filters.origins);
   const startWith = (filters.startWith || '').toString().trim();
+  const canUsePrefixQuery =
+    style === 'all' &&
+    !originQueryTags &&
+    gender === 'all' &&
+    Boolean(startWith);
 
-  if (style !== 'all') {
-    constraints.push(where('tags', 'array-contains', style));
-  } else if (originQueryTags) {
-    constraints.push(where('tags', 'array-contains-any', originQueryTags));
-  }
-  if (gender !== 'all') {
-    constraints.push(where('gender', 'in', genderQueryValues(gender)));
-  }
-  if (startWith) {
-    const prefix = startWith.toLocaleUpperCase();
-    constraints.push(orderBy('name'), startAt(prefix), endAt(`${prefix}\uf8ff`));
+  while (hasMore) {
+    const constraints = [];
+    if (style !== 'all') {
+      constraints.push(where('tags', 'array-contains', style));
+    } else if (originQueryTags) {
+      constraints.push(where('tags', 'array-contains-any', originQueryTags));
+    } else if (gender !== 'all') {
+      constraints.push(where('gender', 'in', genderQueryValues(gender)));
+    }
+
+    if (canUsePrefixQuery) {
+      const prefix = startWith.toLocaleUpperCase();
+      constraints.push(orderBy('name'), orderBy(documentId()));
+      if (cursor && typeof cursor === 'object' && cursor.name && cursor.id) {
+        constraints.push(startAfter(cursor.name, cursor.id));
+      } else {
+        constraints.push(startAt(prefix), endAt(`${prefix}\uf8ff`));
+      }
+    } else {
+      constraints.push(orderBy(documentId()));
+      if (typeof cursor === 'string' && cursor.trim()) {
+        constraints.push(startAfter(cursor));
+      }
+    }
+    constraints.push(limit(CLIENT_FILTER_SCAN_SIZE));
+
+    const snapshot = await getDocs(query(babyNamesCollection(), ...constraints));
+    const docs = snapshot.docs || [];
+    if (!docs.length) {
+      break;
+    }
+
+    docs.forEach(docSnap => {
+      const item = mapNameDoc(docSnap);
+      const id = String(item?.id || '');
+      if (!id || seen.has(id)) {
+        return;
+      }
+      if (!applyFilters([item], filters).length) {
+        return;
+      }
+      seen.add(id);
+      matches.push(item);
+    });
+
+    cursor = toPageCursor(docs[docs.length - 1], canUsePrefixQuery);
+    hasMore = docs.length === CLIENT_FILTER_SCAN_SIZE;
   }
 
-  try {
-    const countSnapshot = await getCountFromServer(
-      constraints.length
-        ? query(babyNamesCollection(), ...constraints)
-        : babyNamesCollection(),
+  return matches;
+};
+
+const getFilteredDiscoverNames = async filters => {
+  const signature = makeFilterSignature(filters);
+  if (
+    filteredDiscoverCache.signature === signature &&
+    Array.isArray(filteredDiscoverCache.names) &&
+    !filteredDiscoverCache.promise
+  ) {
+    return filteredDiscoverCache.names;
+  }
+  if (
+    filteredDiscoverCache.signature === signature &&
+    filteredDiscoverCache.promise
+  ) {
+    return filteredDiscoverCache.promise;
+  }
+
+  const promise = collectFilteredBabyNames(filters)
+    .then(names => {
+      if (filteredDiscoverCache.promise === promise) {
+        filteredDiscoverCache = {
+          signature,
+          names,
+          promise: null,
+        };
+      }
+      return names;
+    })
+    .catch(error => {
+      if (filteredDiscoverCache.promise === promise) {
+        resetFilteredDiscoverCache();
+      }
+      throw error;
+    });
+
+  filteredDiscoverCache = {
+    signature,
+    names: [],
+    promise,
+  };
+  return promise;
+};
+
+const paginateFilteredDiscoverNames = async (filters, reactedIds = []) => {
+  const requestedSize = Number(filters.pageSize ?? filters.pageCount);
+  const pageSize = Math.max(
+    1,
+    Math.min(
+      Number.isFinite(requestedSize) ? requestedSize : BABY_NAMES_PAGE_SIZE,
+      100,
+    ),
+  );
+  const reactedSet = new Set((reactedIds || []).map(String).filter(Boolean));
+  const sessionExclude = new Set(
+    (Array.isArray(filters.excludeIds) ? filters.excludeIds : [])
+      .map(String)
+      .filter(Boolean),
+  );
+  const allMatching = await getFilteredDiscoverNames(filters);
+  const available = allMatching.filter(item => !reactedSet.has(String(item.id)));
+  const startId = cursorId(filters.cursor);
+  let startIndex = 0;
+  if (startId) {
+    const cursorIndex = allMatching.findIndex(
+      item => String(item.id) === startId,
     );
-    const namesCount = countSnapshot.data().count;
-    return {
-      namesCount: typeof namesCount === 'number' ? namesCount : null,
-      exact: typeof namesCount === 'number',
-    };
-  } catch (error) {
-    // A missing composite index is not a reason to show an incorrect count.
+    startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+  }
+
+  const babyNames = [];
+  let index = startIndex;
+  while (index < allMatching.length && babyNames.length < pageSize) {
+    const item = allMatching[index];
+    index += 1;
+    const id = String(item.id);
+    if (reactedSet.has(id) || sessionExclude.has(id)) {
+      continue;
+    }
+    babyNames.push(item);
+  }
+
+  const hasMore = allMatching
+    .slice(index)
+    .some(item => {
+      const id = String(item.id);
+      return !reactedSet.has(id) && !sessionExclude.has(id);
+    });
+  const lastExamined = index > 0 ? allMatching[index - 1] : null;
+  return {
+    babyNames,
+    nextCursor: hasMore && lastExamined ? lastExamined.id : null,
+    hasMore,
+    namesCount: available.length,
+    exact: true,
+  };
+};
+
+/**
+ * Exact count of names matching the selected filters, after liked/disliked
+ * names are excluded. Used by Discover so the banner never shows a page-size
+ * estimate such as 20.
+ */
+export const getBabyNamesFilteredCount = async (filters = {}, reactedIds = []) => {
+  if (!hasActiveFilters(filters)) {
     return {namesCount: null, exact: false};
   }
+  const reactedSet = new Set((reactedIds || []).map(String).filter(Boolean));
+  const names = await getFilteredDiscoverNames(filters);
+  const namesCount = names.filter(item => !reactedSet.has(String(item.id))).length;
+  return {namesCount, exact: true};
 };
 
 /**
@@ -360,11 +543,19 @@ export const getBabyNamesFilteredCount = async (filters = {}) => {
  * id so it is safe to keep in screen state/ref and does not require caching the
  * full catalog locally. Unfiltered Discover pages start at a random document
  * and shuffle the visible cards so reloads do not follow a fixed order.
- * Explicit filters keep their existing query/sort behavior. Client-only
- * filters search at most three 100-document windows per request, rather than
- * scanning the entire catalog before the screen can respond.
+ * Explicit filters collect every matching name so Discover can show an exact
+ * count after like/dislike exclusions, then page through only those names.
  */
 export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
+  const filtering = hasActiveFilters(filters);
+  if (filtering) {
+    return paginateFilteredDiscoverNames(filters, reactedIds);
+  }
+
+  if (!filters.cursor) {
+    resetFilteredDiscoverCache();
+  }
+
   const requestedSize = Number(filters.pageSize ?? filters.pageCount);
   const pageSize = Math.max(
     1,
@@ -379,7 +570,6 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
   const reactedSet = new Set(
     [...(reactedIds || []), ...extraExclude].map(String).filter(Boolean),
   );
-  const filtering = hasActiveFilters(filters);
   const unfiltered = !filtering;
   const clientSideScan = requiresClientSideScan(filters);
   const babyNames = [];
@@ -660,6 +850,7 @@ export const fetchAllBabyNames = async ({forceRefresh = false} = {}) => {
 
 export const clearNamesCache = () => {
   cachedNames = null;
+  resetFilteredDiscoverCache();
 };
 
 export const getBabyNames = async (filters = {}) => {
