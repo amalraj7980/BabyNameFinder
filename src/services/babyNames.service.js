@@ -236,6 +236,29 @@ const paginate = (names, page = 0, pageCount = 1000) => {
   return names.slice(start, end);
 };
 
+const shuffleArray = items => {
+  const next = Array.isArray(items) ? items.slice() : [];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+};
+
+const RANDOM_CURSOR_CHARS =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+const randomDocumentCursor = () => {
+  const length = 1 + Math.floor(Math.random() * 2);
+  let cursor = '';
+  for (let i = 0; i < length; i += 1) {
+    cursor += RANDOM_CURSOR_CHARS.charAt(
+      Math.floor(Math.random() * RANDOM_CURSOR_CHARS.length),
+    );
+  }
+  return cursor;
+};
+
 const hasActiveFilters = filters =>
   Boolean(
     (filters.startWith || '').toString().trim() ||
@@ -335,10 +358,11 @@ export const getBabyNamesFilteredCount = async (filters = {}) => {
 /**
  * Reads a small, cursor-based catalog page. The cursor is a Firestore document
  * id so it is safe to keep in screen state/ref and does not require caching the
- * full catalog locally. We order by document id because every catalog document
- * has one, including the original imported records. Client-only filters search
- * at most three 100-document windows per request, rather than scanning the
- * entire catalog before the screen can respond.
+ * full catalog locally. Unfiltered Discover pages start at a random document
+ * and shuffle the visible cards so reloads do not follow a fixed order.
+ * Explicit filters keep their existing query/sort behavior. Client-only
+ * filters search at most three 100-document windows per request, rather than
+ * scanning the entire catalog before the screen can respond.
  */
 export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
   const requestedSize = Number(filters.pageSize ?? filters.pageCount);
@@ -349,13 +373,20 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
       100,
     ),
   );
-  const reactedSet = new Set((reactedIds || []).map(String));
+  const extraExclude = Array.isArray(filters.excludeIds)
+    ? filters.excludeIds
+    : [];
+  const reactedSet = new Set(
+    [...(reactedIds || []), ...extraExclude].map(String).filter(Boolean),
+  );
   const filtering = hasActiveFilters(filters);
+  const unfiltered = !filtering;
   const clientSideScan = requiresClientSideScan(filters);
   const babyNames = [];
   let cursor = filters.cursor || null;
   let hasMore = true;
   let clientScanWindows = 0;
+  let wrappedToStart = false;
   const gender = normalizeGenderFilter(filters.gender);
   const style = normalizeNameStyle(filters.style);
   const originQueryTags = resolveOriginQueryTags(filters.origins);
@@ -365,6 +396,27 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
     !originQueryTags &&
     gender === 'all' &&
     Boolean(startWith);
+
+  if (unfiltered && (cursor === null || cursor === undefined || cursor === '')) {
+    cursor =
+      String(filters.randomStart || '').trim() || randomDocumentCursor();
+  }
+
+  const takeUnseenMatches = matches =>
+    matches.filter(({item}) => {
+      const id = String(item?.id || '');
+      return Boolean(id) && !reactedSet.has(id);
+    });
+
+  const commitMatches = matches => {
+    matches.forEach(({item}) => {
+      const id = String(item?.id || '');
+      if (id) {
+        reactedSet.add(id);
+      }
+    });
+    babyNames.push(...matches.map(({item}) => item));
+  };
 
   // A new guest with no filters reads exactly 20 documents once. If a filter
   // or prior reactions remove candidates, read further 20-document chunks
@@ -412,20 +464,26 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
     }
     const docs = snapshot.docs || [];
     if (!docs.length) {
+      if (unfiltered && !wrappedToStart) {
+        wrappedToStart = true;
+        cursor = null;
+        continue;
+      }
       hasMore = false;
       break;
     }
 
-    const matches = docs
-      .map(docSnap => ({docSnap, item: mapNameDoc(docSnap)}))
-      .filter(({item}) => !reactedSet.has(String(item.id)))
-      .filter(({item}) => !filtering || applyFilters([item], filters).length)
-      .map(({docSnap, item}) => ({docSnap, item}));
+    const matches = takeUnseenMatches(
+      docs
+        .map(docSnap => ({docSnap, item: mapNameDoc(docSnap)}))
+        .filter(({item}) => !filtering || applyFilters([item], filters).length)
+        .map(({docSnap, item}) => ({docSnap, item})),
+    );
     const remaining = pageSize - babyNames.length;
 
     if (matches.length >= remaining) {
       const selected = matches.slice(0, remaining);
-      babyNames.push(...selected.map(({item}) => item));
+      commitMatches(selected);
       // Do not skip matching names found later in a 100-document client scan.
       // The next page resumes after the last item actually displayed.
       cursor = toPageCursor(
@@ -434,17 +492,28 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
       );
       hasMore =
         selected[selected.length - 1].docSnap.id !== docs[docs.length - 1].id ||
-        docs.length === readSize;
+        docs.length === readSize ||
+        (unfiltered && !wrappedToStart);
       break;
     }
 
-    babyNames.push(...matches.map(({item}) => item));
+    commitMatches(matches);
     cursor = toPageCursor(docs[docs.length - 1], canUsePrefixQuery);
-    hasMore = docs.length === readSize;
+    if (docs.length === readSize) {
+      hasMore = true;
+    } else if (unfiltered && !wrappedToStart) {
+      wrappedToStart = true;
+      cursor = null;
+      hasMore = true;
+    } else {
+      hasMore = false;
+    }
   }
 
   return {
-    babyNames: babyNames.slice(0, pageSize),
+    babyNames: unfiltered
+      ? shuffleArray(babyNames.slice(0, pageSize))
+      : babyNames.slice(0, pageSize),
     nextCursor: hasMore ? cursor : null,
     hasMore,
   };

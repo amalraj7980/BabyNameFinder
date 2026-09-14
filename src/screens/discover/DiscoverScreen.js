@@ -56,11 +56,13 @@ const PREFETCH_REMAINING_CARDS = 4;
 
 const hasSelectedFilters = filters =>
   Boolean(
-    (filters?.firstLetter || '').trim() ||
-      (filters?.lastLetter || '').trim() ||
-      (filters?.contains || '').trim() ||
-      (filters?.originQuery || '').trim() ||
+    (filters?.firstLetter || filters?.startWith || '').toString().trim() ||
+      (filters?.lastLetter || filters?.endsWith || '').toString().trim() ||
+      (filters?.contains || '').toString().trim() ||
+      (filters?.originQuery || '').toString().trim() ||
       filters?.compoundLetter ||
+      filters?.compoundName === true ||
+      filters?.compoundName === 'true' ||
       (filters?.gender && filters.gender !== 'all') ||
       (filters?.nameLength && filters.nameLength !== 'all') ||
       (filters?.style && filters.style !== 'all') ||
@@ -114,27 +116,38 @@ const GenderBadge = ({gender}) => {
   );
 };
 
-const normalizeDeckCards = (names = []) => {
-  const seen = new Set();
-  return (Array.isArray(names) ? names : [])
-    .filter(item => item && (item.id || item.slug || item.name))
-    .map((item, index) => {
-      const base =
-        String(item.id || item.slug || item.name || `name-${index}`).trim() ||
-        `name-${index}`;
-      let uniqueId = base;
-      let dup = 1;
-      while (seen.has(uniqueId)) {
-        uniqueId = `${base}__${dup++}`;
-      }
-      seen.add(uniqueId);
-      return {
-        ...item,
-        id: uniqueId,
-        key: uniqueId,
-        _deckIndex: index,
-      };
+const cardIdentity = (item, index = 0) =>
+  String(item?.id || item?.slug || item?.name || `name-${index}`).trim();
+
+const normalizeDeckCards = (names = [], excludeIds) => {
+  const seen = new Set(
+    (excludeIds instanceof Set
+      ? [...excludeIds]
+      : Array.isArray(excludeIds)
+        ? excludeIds
+        : []
+    )
+      .map(id => String(id || '').trim())
+      .filter(Boolean),
+  );
+  const unique = [];
+  (Array.isArray(names) ? names : []).forEach((item, index) => {
+    if (!item || !(item.id || item.slug || item.name)) {
+      return;
+    }
+    const id = cardIdentity(item, index);
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    unique.push({
+      ...item,
+      id,
+      key: id,
+      _deckIndex: unique.length,
     });
+  });
+  return unique;
 };
 
 const OVERLAY_LABELS = {
@@ -227,6 +240,7 @@ const DiscoverScreen = ({navigation}) => {
   const hasMorePagesRef = useRef(true);
   const catalogCountRef = useRef(null);
   const reactedIdsRef = useRef(null);
+  const sessionSeenIdsRef = useRef(new Set());
   const loadingNextPageRef = useRef(false);
   const prefetchedPageRef = useRef(null);
   const prefetchPromiseRef = useRef(null);
@@ -289,9 +303,34 @@ const DiscoverScreen = ({navigation}) => {
     void refreshProfile();
   }, [isUserLoggedin, authDisplayName, refreshProfile]);
 
+  const rememberSessionIds = useCallback(ids => {
+    const seen = sessionSeenIdsRef.current;
+    (Array.isArray(ids) ? ids : [ids]).forEach(id => {
+      const nextId = String(id || '').trim();
+      if (nextId) {
+        seen.add(nextId);
+      }
+    });
+  }, []);
+
+  const rememberReactedId = useCallback(id => {
+    const nextId = String(id || '').trim();
+    if (!nextId) {
+      return;
+    }
+    rememberSessionIds(nextId);
+    const reacted = Array.isArray(reactedIdsRef.current)
+      ? reactedIdsRef.current
+      : [];
+    if (!reacted.includes(nextId)) {
+      reactedIdsRef.current = [...reacted, nextId];
+    }
+  }, [rememberSessionIds]);
+
   const replaceDeck = useCallback(
     (names, count) => {
-      const deck = normalizeDeckCards(names || []);
+      const deck = normalizeDeckCards(names || [], sessionSeenIdsRef.current);
+      rememberSessionIds(deck.map(item => item.id));
       setBabyNamesData(deck);
       if (typeof count === 'number') {
         setBabyNamesCount(count);
@@ -302,20 +341,13 @@ const DiscoverScreen = ({navigation}) => {
       setIsUndoEnabled(false);
       setDeckEpoch(e => e + 1);
     },
-    [setBabyNamesCount, setIsUndoEnabled],
+    [rememberSessionIds, setBabyNamesCount, setIsUndoEnabled],
   );
 
   const fetchBabyNamesData = useCallback(
     async (options = {}) => {
       const {silent = false} = options;
       const requestId = ++loadingRequestId.current;
-      nextCursorRef.current = null;
-      hasMorePagesRef.current = true;
-      setHasMorePages(false);
-      reactedIdsRef.current = null;
-      prefetchedPageRef.current = null;
-      prefetchPromiseRef.current = null;
-      prefetchCursorRef.current = null;
       if (!silent && !hasLoadedOnceRef.current) {
         setIsLoading(true);
       } else if (!silent) {
@@ -370,7 +402,13 @@ const DiscoverScreen = ({navigation}) => {
           setFilteredCount(null);
           setFilteredCountExact(false);
         }
-        const names = response.babyNames || [];
+        const reacted = new Set(
+          (response.reactedIds || []).map(id => String(id)),
+        );
+        const names = (response.babyNames || []).filter(item => {
+          const id = cardIdentity(item);
+          return Boolean(id) && !reacted.has(id);
+        });
         const count =
           !filtering && Number.isFinite(namesCount) ? namesCount : undefined;
 
@@ -386,6 +424,13 @@ const DiscoverScreen = ({navigation}) => {
           }
         }
 
+        sessionSeenIdsRef.current = new Set();
+        nextCursorRef.current = null;
+        hasMorePagesRef.current = true;
+        setHasMorePages(false);
+        prefetchedPageRef.current = null;
+        prefetchPromiseRef.current = null;
+        prefetchCursorRef.current = null;
         replaceDeck(names, count);
         if (typeof count === 'number') {
           void Storage.setBabyNamesCount(count);
@@ -414,6 +459,7 @@ const DiscoverScreen = ({navigation}) => {
         pageSize: DISCOVER_PAGE_SIZE,
         cursor,
         reactedIds: reactedIdsRef.current || [],
+        excludeIds: [...sessionSeenIdsRef.current],
         u: userId ?? 0,
         startWith: seachfilterData?.firstLetter ?? '',
         endsWith: seachfilterData?.lastLetter ?? '',
@@ -498,7 +544,20 @@ const DiscoverScreen = ({navigation}) => {
       hasMorePagesRef.current = !!response.hasMore;
       setHasMorePages(!!response.hasMore);
       reactedIdsRef.current = response.reactedIds || [];
-      replaceDeck(response.babyNames || []);
+      const reacted = new Set([
+        ...(response.reactedIds || []),
+        ...sessionSeenIdsRef.current,
+      ].map(id => String(id)));
+      const nextNames = (response.babyNames || []).filter(item => {
+        const id = cardIdentity(item);
+        return Boolean(id) && !reacted.has(id);
+      });
+      if (!nextNames.length) {
+        hasMorePagesRef.current = false;
+        setHasMorePages(false);
+        return;
+      }
+      replaceDeck(nextNames);
     } catch (error) {
       console.error(`Failed to load the next name page: ${error}`);
     } finally {
@@ -538,6 +597,7 @@ const DiscoverScreen = ({navigation}) => {
           syllables: card.syllables,
           syllableCount: card.syllableCount,
         };
+        rememberReactedId(card.id);
         setSwipedCards(state => [...state, {card, action: 'liked'}]);
         await likeUser(PAYLOAD);
         setIsUndoEnabled(true);
@@ -545,7 +605,7 @@ const DiscoverScreen = ({navigation}) => {
         console.log('err', e);
       }
     },
-    [userId, setIsUndoEnabled],
+    [rememberReactedId, userId, setIsUndoEnabled],
   );
 
   const disLikeuser = useCallback(
@@ -564,6 +624,7 @@ const DiscoverScreen = ({navigation}) => {
           syllables: card.syllables,
           syllableCount: card.syllableCount,
         };
+        rememberReactedId(card.id);
         setSwipedCards(state => [...state, {card, action: 'disliked'}]);
         await disLikeUser(PAYLOAD);
         setIsUndoEnabled(true);
@@ -571,7 +632,7 @@ const DiscoverScreen = ({navigation}) => {
         console.log('err', e);
       }
     },
-    [userId, setIsUndoEnabled],
+    [rememberReactedId, userId, setIsUndoEnabled],
   );
 
   const undoLastSwipe = useCallback(() => {

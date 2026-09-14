@@ -71,19 +71,16 @@ export const getExcludeReactions = async (filters = {}) => {
 
 /** Discover dashboard: bounded cursor page, never a full catalog read. */
 export const getExcludeReactionsPage = async (filters = {}) => {
-  const userId = filters.u;
-  const hasCachedReactionIds = Array.isArray(filters.reactedIds);
-  const hasUser =
-    userId !== null &&
-    userId !== undefined &&
-    userId !== 0 &&
-    userId !== '0' &&
-    userId !== '';
-  const {allIds} = hasCachedReactionIds
-    ? {allIds: filters.reactedIds}
-    : hasUser
-      ? await getReactedNameIds(userId)
-      : {allIds: []};
+  // Local likes/dislikes apply to guests and signed-in users. Always merge the
+  // live store with any session/page cache so already-swiped names stay hidden.
+  const {allIds: liveIds} = await getReactedNameIds();
+  const extraIds = [
+    ...(Array.isArray(filters.reactedIds) ? filters.reactedIds : []),
+    ...(Array.isArray(filters.excludeIds) ? filters.excludeIds : []),
+  ];
+  const allIds = [
+    ...new Set([...liveIds, ...extraIds].map(String).filter(Boolean)),
+  ];
   const page = await getBabyNamesPage(filters, allIds);
   return {...page, excludedCount: allIds.length, reactedIds: allIds};
 };
