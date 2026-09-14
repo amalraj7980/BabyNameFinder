@@ -1,55 +1,130 @@
 /**
- * Design tokens extracted from Figma / screenshot references.
- * Warm cream surfaces + coral primary (Baby Names for Couples).
+ * Global color pattern — one source for the whole app.
+ * Dusty rose + cream, matching share.html / legal web pages.
+ * Change values here to update every screen.
+ *
+ * To restore the previous coral palette, comment the active Palette
+ * and uncomment the OLD PALETTE block below.
  */
+export const Palette = {
+  rose: '#C17B74',
+  roseDeep: '#B56C66',
+  roseSoft: '#E8C4BE',
+  roseMuted: '#F6E8E4',
+  roseFill: 'rgba(193, 123, 116, 0.12)',
+  cream: '#F7EFE8',
+  creamEnd: '#F4E6DC',
+  paper: '#FFFBF8',
+  white: '#FFFFFF',
+  ink: '#3A2E2A',
+  muted: '#7A6B66',
+  mutedSoft: '#C4A39D',
+  gold: '#D7B37A',
+  border: '#F1E4DF',
+  borderSoft: '#F0E8E2',
+  boy: '#5EC2D7',
+  boySoft: '#A8E4EF',
+  mint: '#98D8AA',
+  unisex: '#8FCB9B',
+  success: '#34C759',
+  error: '#FF3B30',
+};
+
+/* OLD PALETTE (coral / Figma) — kept for restore, not used. */
+ 
+//  export const Palette = {
+//   rose: '#FF6B6B',
+//   roseDeep: '#E85A5A',
+//   roseSoft: '#FF8E8E',
+//   roseMuted: '#FFD0D0',
+//   roseFill: 'rgba(255, 107, 107, 0.12)',
+//   cream: '#FFF8F2',
+//   creamEnd: '#FFEFE4',
+//   paper: '#FFE8D6',
+//   white: '#FFFFFF',
+//   ink: '#2C3340',
+//   muted: '#8B95A5',
+//   mutedSoft: '#A8B0BD',
+//   gold: '#F5D76E',
+//   border: '#E6ECF3',
+//   borderSoft: '#F0E8E2',
+//   boy: '#5EC2D7',
+//   boySoft: '#A8E4EF',
+//   mint: '#98D8AA',
+//   unisex: '#8FCB9B',
+//   success: '#34C759',
+//   error: '#FF3B30',
+// };
+
 export const DesignTokens = {
   colors: {
-    primary: '#FF6B6B',
-    primarySoft: '#FF8E8E',
-    primaryMuted: '#FFD0D0',
-    primaryBorder: '#FFB4B4',
+    primary: Palette.rose,
+    primarySoft: Palette.roseSoft,
+    primaryMuted: Palette.roseMuted,
+    primaryBorder: Palette.roseSoft,
+    primaryFill: Palette.roseFill,
+    headerBg: Palette.rose,
 
-    secondary: '#7EC8D8',
-    secondarySoft: '#A8E4EF',
-    accentMint: '#98D8AA',
-    accentYellow: '#F5D76E',
-    partnerBlue: '#5EC2D7',
+    secondary: Palette.boy,
+    secondarySoft: Palette.boySoft,
+    accentMint: Palette.mint,
+    accentYellow: Palette.gold,
+    partnerBlue: Palette.boy,
+    gold: Palette.gold,
 
-    background: '#FFF8F2',
-    backgroundEnd: '#FFEFE4',
-    surface: '#FFFFFF',
-    surfacePeach: '#FFE8D6',
+    background: Palette.cream,
+    backgroundEnd: Palette.creamEnd,
+    surface: Palette.white,
+    surfacePeach: Palette.paper,
     surfaceMint: '#E8F6EC',
 
-    textPrimary: '#2C3340',
-    textSecondary: '#8B95A5',
-    textTertiary: '#A8B0BD',
-    textOnPrimary: '#FFFFFF',
+    textPrimary: Palette.ink,
+    textSecondary: Palette.muted,
+    textTertiary: Palette.mutedSoft,
+    textOnPrimary: Palette.white,
 
-    border: '#E6ECF3',
-    borderSoft: '#F0E8E2',
+    border: Palette.border,
+    borderSoft: Palette.borderSoft,
     divider: '#EEF1F5',
 
-    success: '#34C759',
+    success: Palette.success,
     successSoft: 'rgba(52, 199, 89, 0.12)',
-    error: '#FF3B30',
-    warning: '#FF9F0A',
+    error: Palette.error,
+    warning: Palette.gold,
 
-    likeOverlay: '#34C759',
-    passOverlay: '#FF6B6B',
+    likeOverlay: Palette.success,
+    passOverlay: Palette.rose,
 
-    chipInactiveBg: '#FFFFFF',
-    chipInactiveBorder: '#DCE3EC',
-    chipSelectedMint: '#98D8AA',
+    chipInactiveBg: Palette.white,
+    chipInactiveBorder: Palette.roseSoft,
+    chipSelectedMint: Palette.mint,
     chipLocked: '#C5CCD6',
 
-    tabInactive: '#9AA3AF',
-    progressTrack: '#E8EEF5',
+    tabInactive: Palette.mutedSoft,
+    progressTrack: Palette.roseMuted,
 
-    headerBg: '#FF6B6B',
-    Boy: '#5EC2D7',
-    Girl: '#FF6B6B',
-    unisex: '#8FCB9B',
+    Boy: Palette.boy,
+    Girl: Palette.rose,
+    unisex: Palette.unisex,
+
+    // Screen aliases so local `const C = T.colors` works everywhere
+    text: Palette.ink,
+    textMuted: Palette.muted,
+    textHint: Palette.mutedSoft,
+    muted: Palette.muted,
+    bg: Palette.cream,
+    bgTop: Palette.cream,
+    bgBottom: Palette.creamEnd,
+    bgEnd: Palette.creamEnd,
+    boy: Palette.boy,
+    girl: Palette.rose,
+    mint: Palette.mint,
+    blue: Palette.boy,
+    chipBorder: Palette.roseSoft,
+    inputBg: Palette.paper,
+    soft: Palette.roseFill,
+    genderIdle: '#EAF1F7',
+    genderIdleText: '#5C7A94',
   },
   radius: {
     sm: 10,
@@ -68,14 +143,14 @@ export const DesignTokens = {
   },
   shadow: {
     card: {
-      shadowColor: '#2D3436',
+      shadowColor: Palette.ink,
       shadowOffset: {width: 0, height: 8},
       shadowOpacity: 0.08,
       shadowRadius: 16,
       elevation: 4,
     },
     soft: {
-      shadowColor: '#2D3436',
+      shadowColor: Palette.ink,
       shadowOffset: {width: 0, height: 4},
       shadowOpacity: 0.06,
       shadowRadius: 10,

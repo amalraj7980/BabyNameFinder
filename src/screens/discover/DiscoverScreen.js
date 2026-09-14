@@ -67,16 +67,7 @@ const hasSelectedFilters = filters =>
       (Array.isArray(filters?.origins) && filters.origins.length > 0),
   );
 
-const C = {
-  primary: '#FF6B6B',
-  text: '#2C3340',
-  textMuted: '#8B95A5',
-  surface: '#FFFFFF',
-  bg: '#FFF8F2',
-  boy: '#5EC2D7',
-  girl: '#FF6B6B',
-  unisex: '#8B95A5',
-};
+const C = T.colors;
 
 const getGenderVisual = gender => {
   const g = (gender || '').toString().toLowerCase().trim();
@@ -835,7 +826,7 @@ const DiscoverScreen = ({navigation}) => {
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
       <LinearGradient
-        colors={[T.colors.background, T.colors.backgroundEnd, '#FFE4D4']}
+        colors={[T.colors.background, T.colors.backgroundEnd, T.colors.surfacePeach]}
         locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"

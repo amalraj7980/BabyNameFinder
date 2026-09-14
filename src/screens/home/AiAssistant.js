@@ -37,18 +37,7 @@ import {
 import {BABY_NAME_AI_STARTER_PROMPTS} from '../../services/gemini/babyNameAiSystem';
 import {isGeminiConfigured} from '../../config/gemini';
 
-const C = {
-  bg: T.colors.background,
-  bgEnd: T.colors.backgroundEnd,
-  primary: T.colors.primary,
-  text: T.colors.textPrimary,
-  muted: T.colors.textSecondary,
-  surface: T.colors.surface,
-  border: T.colors.border,
-  soft: 'rgba(255,107,107,0.10)',
-  mint: T.colors.accentMint,
-  blue: T.colors.partnerBlue,
-};
+const C = T.colors;
 
 const TOPIC_CHIPS = [
   {label: 'Gender', icon: 'male-female'},
@@ -242,7 +231,7 @@ const AiAssistant = ({navigation}) => {
       <View style={styles.emptyWrap}>
         <View style={styles.heroIconOuter}>
           <LinearGradient
-            colors={['#FF8E8E', C.primary]}
+            colors={[T.colors.primarySoft, C.primary]}
             start={{x: 0, y: 0}}
             end={{x: 1, y: 1}}
             style={styles.heroIcon}>
@@ -310,7 +299,7 @@ const AiAssistant = ({navigation}) => {
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={[C.bg, C.bgEnd, '#FFE4D4']}
+        colors={[C.bg, C.bgEnd, T.colors.backgroundEnd]}
         locations={[0, 0.55, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"

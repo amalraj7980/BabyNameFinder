@@ -15,6 +15,7 @@ import {
 import RNRestart from 'react-native-restart';
 
 import {applyColors, getPalette} from './applyColors';
+import {DesignTokens as T} from './designTokens';
 
 const STORAGE_KEY = '@babynames/theme_mode';
 
@@ -67,7 +68,7 @@ export const ThemeProvider = ({children}) => {
       StatusBar.setBackgroundColor('transparent', true);
     } else {
       StatusBar.setBackgroundColor(
-        palette.background || palette.statusBarBg || '#FFF8F2',
+        palette.background || palette.statusBarBg || T.colors.background,
       );
     }
   }, [mode, hydrated]);

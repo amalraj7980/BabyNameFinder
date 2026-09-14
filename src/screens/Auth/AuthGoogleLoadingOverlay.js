@@ -7,13 +7,9 @@ import {
   Platform,
 } from 'react-native';
 import {Fonts} from '../../styles';
+import {DesignTokens as T} from '../../theme/designTokens';
 
-const C = {
-  primary: '#FF6B6B',
-  text: '#2C3340',
-  muted: '#8B95A5',
-  surface: '#FFFFFF',
-};
+const C = T.colors;
 
 /**
  * In-screen blocker while Google / Gmail sign-in completes.

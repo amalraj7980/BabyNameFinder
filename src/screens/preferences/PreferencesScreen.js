@@ -46,21 +46,7 @@ const CARD_PAD = 14;
 const PREVIEW_W = Math.min(SCREEN_W * 0.48, 176);
 const PREVIEW_H = 188;
 
-const C = {
-  bgTop: '#FFF8F2',
-  bgBottom: '#FFEFE4',
-  primary: '#FF6B6B',
-  primarySoft: '#FF8E8E',
-  text: '#2C3340',
-  textMuted: '#8B95A5',
-  textHint: '#A8B0BD',
-  border: '#E6ECF3',
-  chipBorder: '#DCE3EC',
-  mint: '#98D8AA',
-  genderIdle: '#EAF1F7',
-  genderIdleText: '#5C7A94',
-  surface: '#FFFFFF',
-};
+const C = T.colors;
 
 const STYLE_OPTIONS = NAME_STYLE_OPTIONS;
 
@@ -851,7 +837,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   dotIdle: {
-    backgroundColor: '#FFD0D0',
+    backgroundColor: C.primarySoft,
   },
   waitingText: {
     fontFamily: Fonts.regular,
@@ -1142,7 +1128,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: C.surface,
     borderWidth: 1.5,
-    borderColor: '#FFD0D0',
+    borderColor: C.primarySoft,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

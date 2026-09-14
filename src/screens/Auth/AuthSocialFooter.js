@@ -1,6 +1,7 @@
 import React from 'react';
 import {ActivityIndicator, Image, Pressable, Text, View} from 'react-native';
 import {authStyles} from './authStyles';
+import {DesignTokens as T} from '../../theme/designTokens';
 
 const GOOGLE_ICON = require('../../assects/google.png');
 
@@ -40,7 +41,7 @@ const AuthSocialFooter = ({
         }>
         {googleLoading ? (
           <>
-            <ActivityIndicator size="small" color="#FF6B6B" />
+            <ActivityIndicator size="small" color={T.colors.primary} />
             <Text style={authStyles.googleButtonText}>Signing in…</Text>
           </>
         ) : (

@@ -17,21 +17,11 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import {AppContext} from '../../context/AppContext';
 import {Fonts} from '../../styles';
+import {DesignTokens as T} from '../../theme/designTokens';
 import {getTabBarStyle} from '../../routes/tabBarStyles';
 import {COUNTRY_ORIGIN_OPTIONS} from '../../constants/countryOriginOptions';
 
-const C = {
-  bg: '#FFF8F2',
-  primary: '#FF6B6B',
-  text: '#2C3340',
-  muted: '#8B95A5',
-  surface: '#FFFFFF',
-  border: '#E6ECF3',
-  boy: '#5EC2D7',
-  girl: '#FF6B6B',
-  unisex: '#98D8AA',
-  inputBg: '#FAFBFC',
-};
+const C = T.colors;
 
 const GENDER_OPTIONS = [
   {label: 'All', value: 'all', color: C.text},
@@ -274,7 +264,7 @@ export default function NameFilterSearch({navigation}) {
                   </Text>
                 </View>
                 <Switch
-                  trackColor={{false: '#D8DEE6', true: '#FFD0D0'}}
+                  trackColor={{false: T.colors.chipLocked, true: T.colors.primarySoft}}
                   thumbColor={draft.compoundLetter ? C.primary : '#F4F4F5'}
                   ios_backgroundColor="#D8DEE6"
                   onValueChange={value => setField('compoundLetter', value)}

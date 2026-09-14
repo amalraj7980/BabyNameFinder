@@ -4,6 +4,7 @@ import {AuthContext} from '../../context/AuthContext';
 import {navigateToHome} from '../../routes/navigationRef';
 import AuthScreenLayout from './AuthScreenLayout';
 import {authStyles} from './authStyles';
+import {DesignTokens as T} from '../../theme/designTokens';
 
 const POLL_INTERVAL_MS = 5000;
 const RESEND_COOLDOWN_MS = 60000;
@@ -99,15 +100,15 @@ const EmailVerificationScreen = ({navigation}) => {
       heroSubtitle="We sent a verification link to your inbox. Open it to activate your account.">
       <View
         style={{
-          backgroundColor: '#FFF8F2',
+          backgroundColor: T.colors.background,
           borderRadius: 12,
           padding: 14,
           marginBottom: 14,
           borderWidth: 1,
-          borderColor: '#F0E8E2',
+          borderColor: T.colors.borderSoft,
         }}>
         <Text style={authStyles.footerText}>Email</Text>
-        <Text style={[authStyles.heroSubtitle, {color: '#2C3340', fontWeight: '600'}]}>
+        <Text style={[authStyles.heroSubtitle, {color: T.colors.textPrimary, fontWeight: '600'}]}>
           {email || '—'}
         </Text>
       </View>
@@ -132,7 +133,7 @@ const EmailVerificationScreen = ({navigation}) => {
         ]}
         disabled={loading}>
         {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={T.colors.textOnPrimary} />
         ) : (
           <Text style={authStyles.primaryButtonText}>I’ve verified</Text>
         )}

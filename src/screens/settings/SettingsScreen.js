@@ -39,7 +39,7 @@ const SettingsScreen = ({navigation}) => {
       <StatusBar
         barStyle={colors.statusBarStyle || 'dark-content'}
         backgroundColor={
-          colors.statusBarBg || colors.background || '#FFF8F2'
+          colors.statusBarBg || colors.background
         }
       />
       <ScrollView
