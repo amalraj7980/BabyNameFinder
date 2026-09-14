@@ -5,6 +5,7 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import {
   likedNamesCollection,
+  dislikedNamesCollection,
   likedNameDocument,
   babyNameDocument,
   mapNameDoc,
@@ -16,8 +17,12 @@ import {
   getLocalFavoriteIds,
   addLocalFavorite,
   removeLocalFavorite,
-  clearLocalFavorites,
 } from './localFavorites.service';
+import {
+  hydrateReactionsStore,
+  mergeCloudRecords,
+  getLikeRecords,
+} from '../store/reactionsStore';
 
 const userFavoritesCollection = uid =>
   firestore()
@@ -108,57 +113,23 @@ export const addCloudFavorite = async (uid, nameId, nameData = {}) => {
 };
 
 /**
- * Merge local guest favorites into the authenticated account (no overwrite).
- * Clears local only after successful sync.
+ * Merge local guest likes/dislikes into the authenticated account.
+ * Local store stays as the cache; cloud write is a single background batch.
  */
 export const migrateLocalFavoritesToAccount = async uid => {
   if (!uid) {
     return {merged: 0};
   }
-  const localIds = await getLocalFavoriteIds();
-  if (!localIds.length) {
-    return {merged: 0};
-  }
-  const cloudIds = await getCloudFavoriteIds(uid);
-  const cloudSet = new Set(cloudIds);
-  const toAdd = localIds.filter(id => !cloudSet.has(id));
-  const names = await resolveNamesByIds(toAdd);
-
-  // Firestore batch limit 500
-  for (let i = 0; i < toAdd.length; i += 400) {
-    const slice = toAdd.slice(i, i + 400);
-    const batch = firestore().batch();
-    slice.forEach(id => {
-      const nameData = names.find(n => String(n.id) === id) || {};
-      batch.set(
-        userFavoriteDocument(uid, id),
-        {
-          nameId: id,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        {merge: true},
-      );
-      batch.set(
-        likedNameDocument(uid, id),
-        {
-          nameId: id,
-          name: nameData.name || '',
-          gender: nameData.gender || '',
-          origin: nameData.origin || '',
-          meaning: nameData.meaning || '',
-          syllables: nameData.syllables || '',
-          syllableCount: nameData.syllableCount || 1,
-          createdAt: serverTimestamp(),
-        },
-        {merge: true},
-      );
-    });
-    await batch.commit();
-  }
-
-  await clearLocalFavorites();
-  return {merged: toAdd.length, total: localIds.length};
+  await hydrateReactionsStore();
+  const {
+    enqueueLocalStoreForAccountMerge,
+    flushPendingReactions,
+    resumeReactionSync,
+  } = require('./reactionBatch.service');
+  const merged = await enqueueLocalStoreForAccountMerge();
+  resumeReactionSync();
+  void flushPendingReactions({userId: uid, force: true});
+  return {merged, total: merged};
 };
 
 /** Copy reactions from previous anonymous uid into new uid, then migrate local. */
@@ -168,29 +139,26 @@ export const migrateGuestDataToAccount = async (fromUid, toUid) => {
   }
   if (fromUid && fromUid !== toUid) {
     try {
-      const likesSnap = await likedNamesCollection(fromUid).get();
-      for (let i = 0; i < likesSnap.docs.length; i += 400) {
-        const slice = likesSnap.docs.slice(i, i + 400);
-        const batch = firestore().batch();
-        slice.forEach(docSnap => {
-          const data = docSnap.data() || {};
-          batch.set(
-            likedNameDocument(toUid, docSnap.id),
-            {...data, nameId: docSnap.id},
-            {merge: true},
-          );
-          batch.set(
-            userFavoriteDocument(toUid, docSnap.id),
-            {
-              nameId: docSnap.id,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            },
-            {merge: true},
-          );
-        });
-        await batch.commit();
-      }
+      const [likesSnap, dislikesSnap] = await Promise.all([
+        likedNamesCollection(fromUid).get(),
+        dislikedNamesCollection(fromUid).get().catch(() => ({docs: []})),
+      ]);
+      mergeCloudRecords(
+        'like',
+        likesSnap.docs
+          .filter(d => d.id !== '_meta')
+          .map(d => {
+            const data = d.data() || {};
+            return {id: d.id, ...data};
+          }),
+      );
+      mergeCloudRecords(
+        'dislike',
+        (dislikesSnap.docs || []).map(d => {
+          const data = d.data() || {};
+          return {id: d.id, ...data};
+        }),
+      );
     } catch (e) {
       console.warn('Anon reaction migrate skipped:', e?.message || e);
     }
@@ -214,10 +182,10 @@ export const ensureCloudFavoritesForUser = async uid => {
   }
 
   try {
-    const {flushPendingReactions} = require('./reactionBatch.service');
-    await flushPendingReactions({userId, force: true});
+    const {resumeReactionSync} = require('./reactionBatch.service');
+    resumeReactionSync();
   } catch (e) {
-    console.warn('ensureCloudFavorites flush skipped:', e?.message || e);
+    // ignore
   }
 
   try {
@@ -264,25 +232,23 @@ export const ensureCloudFavoritesForUser = async uid => {
     console.warn('ensureCloudFavorites user stamp failed:', e?.message || e);
   }
 
+  try {
+    const {hydrateCloudReactions} = require('./reactions.service');
+    void hydrateCloudReactions(userId);
+  } catch (e) {
+    // ignore
+  }
+
   return {ok: true, merged};
 };
 
-export const getFavoriteNameCards = async ({userId, isLoggedIn} = {}) => {
-  const uid = userId || auth().currentUser?.uid || null;
-  if (isLoggedIn && uid) {
-    const ids = await getCloudFavoriteIds(uid);
-    return resolveNamesByIds(ids.filter(id => id !== '_meta'));
+export const getFavoriteNameCards = async () => {
+  await hydrateReactionsStore();
+  const local = getLikeRecords();
+  if (local.length) {
+    return local;
   }
-  // Guest: local first; also merge anon cloud likes if present
-  const localIds = await getLocalFavoriteIds();
-  let cloudIds = [];
-  if (uid) {
-    cloudIds = await getCloudFavoriteIds(uid).catch(() => []);
-  }
-  const merged = [...new Set([...localIds, ...cloudIds])].filter(
-    id => id !== '_meta',
-  );
-  return resolveNamesByIds(merged);
+  return resolveNamesByIds(await getLocalFavoriteIds());
 };
 
 export {addLocalFavorite, removeLocalFavorite, getLocalFavoriteIds};

@@ -23,9 +23,8 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
 import {BrandMark} from '../../components/ui/DesignSystem';
-import {getLikedNamesPage, disLikeUser} from '../../api';
+import {disLikeUser} from '../../api';
 import {AuthContext} from '../../context/AuthContext';
-import {AppContext} from '../../context/AppContext';
 import {
   getDisplayName,
   isPartnerLinked,
@@ -35,7 +34,12 @@ import {
   getActivePartnerSession,
   refreshPartnerConnection,
 } from '../../services/partner.service';
-import {subscribeLocalFavorites} from '../../services/localFavorites.service';
+import {
+  queryLikes,
+  subscribeReactions,
+  hydrateReactionsStore,
+} from '../../store/reactionsStore';
+import {hydrateCloudReactions} from '../../services/reactions.service';
 import {resolveDisplayName} from '../../utils/profileDisplay';
 
 const keyExtractor = item => String(item.id);
@@ -48,27 +52,10 @@ const GENDER_FILTERS = [
   {label: 'Unisex', value: 'unisex'},
 ];
 
-const normalizeGender = value => {
-  const g = String(value || '')
-    .toLowerCase()
-    .trim();
-  if (g === 'boy' || g === 'male' || g === 'm') {
-    return 'male';
-  }
-  if (g === 'girl' || g === 'female' || g === 'f') {
-    return 'female';
-  }
-  if (g === 'unisex') {
-    return 'unisex';
-  }
-  return '';
-};
-
 const MatchesScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
   const {userId, displayName: authDisplayName, isUserLoggedin} =
     useContext(AuthContext);
-  const {likeCount, dislikeCount} = useContext(AppContext);
 
   const [likedNames, setLikedNames] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -86,6 +73,25 @@ const MatchesScreen = ({navigation}) => {
   const loadingLikedRef = useRef(false);
   const loadingMoreLikedRef = useRef(false);
   const hasMoreLikedRef = useRef(true);
+  const loadedCountRef = useRef(LIKED_PAGE_SIZE);
+  const searchQueryRef = useRef('');
+  const genderFilterRef = useRef('all');
+
+  const refreshFromStore = useCallback((reset = false) => {
+    if (reset) {
+      loadedCountRef.current = LIKED_PAGE_SIZE;
+    }
+    const response = queryLikes({
+      search: searchQueryRef.current,
+      gender: genderFilterRef.current,
+      pageSize: loadedCountRef.current,
+    });
+    setLikedNames(response?.likes ?? []);
+    likedCursorRef.current = response?.nextCursor ?? null;
+    hasMoreLikedRef.current = !!response?.hasMore;
+    setHasMoreLiked(hasMoreLikedRef.current);
+    setIsLoading(false);
+  }, []);
 
   const fetchLiked = useCallback(async () => {
     if (loadingLikedRef.current) {
@@ -94,56 +100,34 @@ const MatchesScreen = ({navigation}) => {
     loadingLikedRef.current = true;
     setIsLoading(true);
     try {
-      const response = await getLikedNamesPage(userId, {
-        pageSize: LIKED_PAGE_SIZE,
-      });
-      setLikedNames(response?.likes ?? []);
-      likedCursorRef.current = response?.nextCursor ?? null;
-      hasMoreLikedRef.current = !!response?.hasMore;
-      setHasMoreLiked(hasMoreLikedRef.current);
+      await hydrateReactionsStore();
+      if (isUserLoggedin) {
+        void hydrateCloudReactions(userId);
+      }
+      refreshFromStore(true);
     } catch (error) {
       console.error(`Failed to fetch likes: ${error}`);
+      setIsLoading(false);
     } finally {
       loadingLikedRef.current = false;
-      setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, isUserLoggedin, refreshFromStore]);
 
-  const loadMoreLiked = useCallback(async () => {
+  const loadMoreLiked = useCallback(() => {
     if (
       loadingLikedRef.current ||
       loadingMoreLikedRef.current ||
-      !hasMoreLikedRef.current ||
-      !likedCursorRef.current
+      !hasMoreLikedRef.current
     ) {
       return;
     }
-
     loadingMoreLikedRef.current = true;
     setIsLoadingMoreLiked(true);
-    try {
-      const response = await getLikedNamesPage(userId, {
-        pageSize: LIKED_PAGE_SIZE,
-        cursor: likedCursorRef.current,
-      });
-      const nextPage = response?.likes ?? [];
-      setLikedNames(previous => {
-        const knownIds = new Set(previous.map(item => String(item.id)));
-        return [
-          ...previous,
-          ...nextPage.filter(item => !knownIds.has(String(item.id))),
-        ];
-      });
-      likedCursorRef.current = response?.nextCursor ?? null;
-      hasMoreLikedRef.current = !!response?.hasMore;
-      setHasMoreLiked(hasMoreLikedRef.current);
-    } catch (error) {
-      console.error(`Failed to load more likes: ${error}`);
-    } finally {
-      loadingMoreLikedRef.current = false;
-      setIsLoadingMoreLiked(false);
-    }
-  }, [userId]);
+    loadedCountRef.current += LIKED_PAGE_SIZE;
+    refreshFromStore(false);
+    loadingMoreLikedRef.current = false;
+    setIsLoadingMoreLiked(false);
+  }, [refreshFromStore]);
 
   useFocusEffect(
     useCallback(() => {
@@ -162,18 +146,24 @@ const MatchesScreen = ({navigation}) => {
           setPartnerLinked(linked);
         }
       })();
-      unsubLocal = subscribeLocalFavorites(() => {
-        void fetchLiked();
+      unsubLocal = subscribeReactions(() => {
+        refreshFromStore(false);
       });
       return () => {
         unsubLocal();
       };
-    }, [fetchLiked, isUserLoggedin, authDisplayName]),
+    }, [fetchLiked, refreshFromStore, isUserLoggedin, authDisplayName]),
   );
 
   useEffect(() => {
+    searchQueryRef.current = searchQuery;
+    genderFilterRef.current = genderFilter;
+    refreshFromStore(true);
+  }, [searchQuery, genderFilter, refreshFromStore]);
+
+  useEffect(() => {
     fetchLiked();
-  }, [fetchLiked, likeCount, dislikeCount, userId]);
+  }, [fetchLiked]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -201,7 +191,16 @@ const MatchesScreen = ({navigation}) => {
       setDislikingId(id);
       setLikedNames(prev => prev.filter(n => String(n.id) !== id));
       try {
-        await disLikeUser({userId: userId ?? 0, nameId: id});
+        await disLikeUser({
+          userId: userId ?? 0,
+          nameId: id,
+          name: item.name,
+          gender: item.gender,
+          origin: item.origin,
+          meaning: item.meaning,
+          syllables: item.syllables,
+          syllableCount: item.syllableCount,
+        });
       } catch (e) {
         console.log('Matches dislike failed:', e);
         setLikedNames(prev => {
@@ -228,22 +227,7 @@ const MatchesScreen = ({navigation}) => {
 
   const query = searchQuery.trim().toLowerCase();
   const hasActiveFilters = query.length > 0 || genderFilter !== 'all';
-
-  const visibleNames = useMemo(() => {
-    return likedNames.filter(item => {
-      const name = String(item?.name || '');
-      if (query && !name.toLowerCase().includes(query)) {
-        return false;
-      }
-      if (genderFilter !== 'all') {
-        const gender = normalizeGender(item?.gender);
-        if (gender !== genderFilter) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [likedNames, query, genderFilter]);
+  const visibleNames = likedNames;
 
   const renderLikedCard = useCallback(
     ({item}) => {

@@ -128,9 +128,16 @@ const TheWholeLIst = ({navigation, route}) => {
   const likeuser = useCallback(
     async id => {
       try {
+        const card = babyNamesData.find(item => item.id === id) || {};
         const PAYLOAD = {
           userId: userId ?? 0,
           nameId: id,
+          name: card.name,
+          gender: card.gender,
+          origin: card.origin,
+          meaning: card.meaning,
+          syllables: card.syllables,
+          syllableCount: card.syllableCount,
         };
 
         const likedData = await toggleLikeUser(PAYLOAD);
@@ -181,7 +188,7 @@ const TheWholeLIst = ({navigation, route}) => {
         console.log('err', e);
       }
     },
-    [userId],
+    [userId, babyNamesData],
   );
   const closePopup = () => {
     setIsPopupVisible(false);

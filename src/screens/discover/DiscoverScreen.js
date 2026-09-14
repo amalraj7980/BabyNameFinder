@@ -528,7 +528,16 @@ const DiscoverScreen = ({navigation}) => {
         return;
       }
       try {
-        const PAYLOAD = {userId: userId ?? 0, nameId: card.id};
+        const PAYLOAD = {
+          userId: userId ?? 0,
+          nameId: card.id,
+          name: card.name,
+          gender: card.gender,
+          origin: card.origin,
+          meaning: card.meaning,
+          syllables: card.syllables,
+          syllableCount: card.syllableCount,
+        };
         setSwipedCards(state => [...state, {card, action: 'liked'}]);
         await likeUser(PAYLOAD);
         setIsUndoEnabled(true);
@@ -545,7 +554,16 @@ const DiscoverScreen = ({navigation}) => {
         return;
       }
       try {
-        const PAYLOAD = {userId: userId ?? 0, nameId: card.id};
+        const PAYLOAD = {
+          userId: userId ?? 0,
+          nameId: card.id,
+          name: card.name,
+          gender: card.gender,
+          origin: card.origin,
+          meaning: card.meaning,
+          syllables: card.syllables,
+          syllableCount: card.syllableCount,
+        };
         setSwipedCards(state => [...state, {card, action: 'disliked'}]);
         await disLikeUser(PAYLOAD);
         setIsUndoEnabled(true);

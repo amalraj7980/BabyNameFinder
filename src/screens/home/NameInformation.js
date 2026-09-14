@@ -131,7 +131,16 @@ const NameInformation = ({navigation, route}) => {
 
   const onPass = useCallback(async () => {
     try {
-      await disLikeUser({userId: userId ?? 0, nameId: nameInfo.id});
+      await disLikeUser({
+        userId: userId ?? 0,
+        nameId: nameInfo.id,
+        name: nameInfo.name,
+        gender: nameInfo.gender,
+        origin: nameInfo.origin,
+        meaning: nameInfo.meaning,
+        syllables: nameInfo.syllables,
+        syllableCount: nameInfo.syllableCount,
+      });
     } catch (e) {
       // ignore
     }
@@ -140,7 +149,16 @@ const NameInformation = ({navigation, route}) => {
 
   const onLike = useCallback(async () => {
     try {
-      await likeUser({userId: userId ?? 0, nameId: nameInfo.id});
+      await likeUser({
+        userId: userId ?? 0,
+        nameId: nameInfo.id,
+        name: nameInfo.name,
+        gender: nameInfo.gender,
+        origin: nameInfo.origin,
+        meaning: nameInfo.meaning,
+        syllables: nameInfo.syllables,
+        syllableCount: nameInfo.syllableCount,
+      });
     } catch (e) {
       // ignore
     }

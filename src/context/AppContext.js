@@ -150,6 +150,22 @@ export const AppContextProvider = ({children}) => {
     loadIsPrimeFromStorage();
     loadCardStyleFromStorage();
   }, []);
+
+  useEffect(() => {
+    const {
+      subscribeReactions,
+      hydrateReactionsStore,
+      getReactionsSnapshot,
+    } = require('../store/reactionsStore');
+    const snap = getReactionsSnapshot();
+    setLikeCount(snap.likeCount);
+    setDislikeCount(snap.dislikeCount);
+    void hydrateReactionsStore();
+    return subscribeReactions(next => {
+      setLikeCount(next.likeCount);
+      setDislikeCount(next.dislikeCount);
+    });
+  }, []);
   const [appState, setAppState] = useState(AppState.currentState);
 
   useEffect(() => {

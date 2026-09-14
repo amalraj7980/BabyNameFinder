@@ -104,6 +104,14 @@ const ThemedNavigation = () => {
   }, []);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const {startReactionsSystem} = require('../services/reactions.service');
+        await startReactionsSystem();
+      } catch (e) {
+        // ignore
+      }
+    })();
     const onAppStateChange = next => {
       if (next !== 'active') {
         void (async () => {

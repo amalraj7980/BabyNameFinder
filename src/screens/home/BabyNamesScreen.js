@@ -196,8 +196,17 @@ const BabyNamesScreen = ({navigation, route}) => {
   const likeuser = useCallback(
     async id => {
       try {
-        const PAYLOAD = {userId: userId ?? 0, nameId: id};
         const swipedCard = babyNamesDataRef.current.find(item => item.id === id);
+        const PAYLOAD = {
+          userId: userId ?? 0,
+          nameId: id,
+          name: swipedCard?.name,
+          gender: swipedCard?.gender,
+          origin: swipedCard?.origin,
+          meaning: swipedCard?.meaning,
+          syllables: swipedCard?.syllables,
+          syllableCount: swipedCard?.syllableCount,
+        };
         setSwipedCards(state => [...state, {card: swipedCard, action: 'liked'}]);
         setLikedNames(state => [...state, id]);
         setBabyNamesData(state => state.filter(item => item.id !== id));
@@ -214,8 +223,17 @@ const BabyNamesScreen = ({navigation, route}) => {
   const disLikeuser = useCallback(
     async id => {
       try {
-        const PAYLOAD = {userId: userId ?? 0, nameId: id};
         const swipedCard = babyNamesDataRef.current.find(item => item.id === id);
+        const PAYLOAD = {
+          userId: userId ?? 0,
+          nameId: id,
+          name: swipedCard?.name,
+          gender: swipedCard?.gender,
+          origin: swipedCard?.origin,
+          meaning: swipedCard?.meaning,
+          syllables: swipedCard?.syllables,
+          syllableCount: swipedCard?.syllableCount,
+        };
         setSwipedCards(state => [
           ...state,
           {card: swipedCard, action: 'disliked'},

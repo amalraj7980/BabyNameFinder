@@ -1,72 +1,34 @@
 /**
- * Local dislike IDs — mirror of favorites for offline / batched sync.
+ * Local dislike IDs — backed by the in-memory reactions store.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  applyDislike,
+  applyUndislike,
+  getDislikeIds,
+  hydrateReactionsStore,
+  subscribeReactions,
+} from '../store/reactionsStore';
 
-const KEY = '@babynames/dislike_names';
-
-const listeners = new Set();
-
-const notify = ids => {
-  listeners.forEach(fn => {
-    try {
-      fn(ids);
-    } catch (e) {
-      // ignore
-    }
-  });
+export const getLocalDislikeIds = async () => {
+  await hydrateReactionsStore();
+  return getDislikeIds();
 };
-
-const readIds = async () => {
-  try {
-    const raw = await AsyncStorage.getItem(KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return [...new Set(parsed.map(String).filter(Boolean))];
-  } catch (e) {
-    return [];
-  }
-};
-
-const writeIds = async ids => {
-  const unique = [...new Set(ids.map(String).filter(Boolean))];
-  await AsyncStorage.setItem(KEY, JSON.stringify(unique));
-  notify(unique);
-  return unique;
-};
-
-export const getLocalDislikeIds = async () => readIds();
 
 export const addLocalDislike = async nameId => {
-  const id = String(nameId || '').trim();
-  if (!id) {
-    return readIds();
-  }
-  const ids = await readIds();
-  if (ids.includes(id)) {
-    return ids;
-  }
-  return writeIds([...ids, id]);
+  applyDislike({id: nameId});
+  return getDislikeIds();
 };
 
 export const removeLocalDislike = async nameId => {
-  const id = String(nameId || '').trim();
-  const ids = await readIds();
-  return writeIds(ids.filter(x => x !== id));
+  applyUndislike(nameId);
+  return getDislikeIds();
 };
 
 export const clearLocalDislikes = async () => {
-  await AsyncStorage.removeItem(KEY);
-  notify([]);
+  getDislikeIds().forEach(id => applyUndislike(id));
 };
 
-export const subscribeLocalDislikes = listener => {
-  listeners.add(listener);
-  readIds().then(listener).catch(() => listener([]));
-  return () => listeners.delete(listener);
-};
+export const subscribeLocalDislikes = listener =>
+  subscribeReactions(snapshot => {
+    listener(snapshot.dislikeIds);
+  });
