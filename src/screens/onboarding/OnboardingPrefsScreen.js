@@ -24,6 +24,35 @@ import {AppContext} from '../../context/AppContext';
 
 const STYLE_OPTIONS = NAME_STYLE_OPTIONS;
 
+/** Static demo totals — each selected option clearly changes the number. */
+const STYLE_BONUS = {
+  classic: 420,
+  modern: 310,
+  vintage: 245,
+  short: 280,
+  neutral: 160,
+  heritage: 195,
+  vibe: 175,
+  premium: 350,
+};
+
+const getStaticMatchCount = (boy, girl, stylesSelected) => {
+  if (!boy && !girl) {
+    return 0;
+  }
+  // Gender base
+  let total = boy && girl ? 380 : boy ? 260 : 280;
+  const selected = Array.isArray(stylesSelected) ? stylesSelected : [];
+  if (selected.length === 0) {
+    total += 180;
+  } else {
+    selected.forEach(id => {
+      total += STYLE_BONUS[id] || 120;
+    });
+  }
+  return total;
+};
+
 const OnboardingPrefsScreen = ({navigation}) => {
   const insets = useSafeAreaInsets();
   const {isPrime} = useContext(AppContext);
@@ -77,6 +106,10 @@ const OnboardingPrefsScreen = ({navigation}) => {
   })();
 
   const canContinue = boy || girl;
+  const matchCount = getStaticMatchCount(boy, girl, stylesSelected);
+  const matchLabel = !canContinue
+    ? 'Select a gender to see matching names.'
+    : `${matchCount} name${matchCount === 1 ? '' : 's'} match your preferences.`;
 
   return (
     <ScreenScaffold>
@@ -132,7 +165,7 @@ const OnboardingPrefsScreen = ({navigation}) => {
                 label={opt.label}
                 locked={locked}
                 selected={!locked && stylesSelected.includes(opt.id)}
-                selectedColor={opt.color || T.colors.primary}
+                selectedColor={opt.color || T.colors.chipSelectedMint || '#98D8AA'}
                 onPress={() => onStylePress(opt.id)}
               />
             );
@@ -140,7 +173,7 @@ const OnboardingPrefsScreen = ({navigation}) => {
           <Chip label="Browse collections" accent onPress={() => {}} />
         </View>
 
-        <Text style={styles.matchCount}>56 names match your preferences.</Text>
+        <Text style={styles.matchCount}>{matchLabel}</Text>
       </ScrollView>
 
       <View style={[styles.footer, {paddingBottom: Math.max(insets.bottom, 16)}]}>
