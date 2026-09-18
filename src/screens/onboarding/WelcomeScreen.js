@@ -14,11 +14,9 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {CommonActions} from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
-import {markAppEntered} from '../../services/onboardingStorage';
 import {speakNamePronunciation} from '../../services/speakPronunciation';
 
 const APP_LOGO = require('../../assects/App Icon 1024x1024.png');
@@ -150,16 +148,6 @@ const WelcomeScreen = ({navigation}) => {
 
   const openAuth = useCallback(() => {
     navigation.getParent()?.navigate('Auth') ?? navigation.navigate('Auth');
-  }, [navigation]);
-
-  const skipToApp = useCallback(async () => {
-    await markAppEntered();
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{name: 'MainTabs'}],
-      }),
-    );
   }, [navigation]);
 
   const speakOliver = useCallback(() => {
@@ -332,15 +320,6 @@ const WelcomeScreen = ({navigation}) => {
               accessibilityLabel="Login or Sign Up">
               <Text style={styles.secondaryText} allowFontScaling={false}>
                 Login / Sign Up
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={skipToApp}
-              hitSlop={{top: 10, bottom: 10, left: 16, right: 16}}
-              style={styles.skipBtn}>
-              <Text style={styles.skipText} allowFontScaling={false}>
-                Skip intro — browse names
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -586,15 +565,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: 15,
     color: T.colors.primary,
-  },
-  skipBtn: {
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  skipText: {
-    fontFamily: Fonts.medium,
-    fontSize: 13,
-    color: T.colors.textSecondary,
   },
 });
 
