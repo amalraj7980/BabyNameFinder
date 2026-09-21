@@ -28,7 +28,6 @@ import {
 } from '../../api';
 import {AppContext} from '../../context/AppContext';
 import {AuthContext} from '../../context/AuthContext';
-import {Storage} from '../../util';
 import {shareBabyName} from '../../services/shareBabyName';
 import CustomPopup from '../../components/CustomPopup';
 import useBackExit from '../../hooks/useBackExit';
@@ -61,7 +60,6 @@ const BabyNamesScreen = ({navigation, route}) => {
     seachfilterData,
     setIsUndoEnabled,
     isUndoEnabled,
-    setBabyNamesCount,
   } = useContext(AppContext);
 
   const {loginOccurred, userId, firebaseReady} = useContext(AuthContext);
@@ -111,15 +109,11 @@ const BabyNamesScreen = ({navigation, route}) => {
       };
 
       try {
-        const response = await getExcludeReactions({
-          ...queryParams,
-          forceRefresh: !silent,
-        });
+        const response = await getExcludeReactions(queryParams);
         if (requestId !== loadingRequestId.current) {
           return;
         }
         setBabyNamesData(response.babyNames || []);
-        setBabyNamesCount(response.count ?? 0);
         hasLoadedOnceRef.current = true;
         setHasLoadedOnce(true);
       } catch (error) {
@@ -130,7 +124,7 @@ const BabyNamesScreen = ({navigation, route}) => {
         }
       }
     },
-    [seachfilterData, userId, setBabyNamesCount],
+    [seachfilterData, userId],
   );
 
   const fetchData = useCallback(async () => {
@@ -147,12 +141,10 @@ const BabyNamesScreen = ({navigation, route}) => {
 
     try {
       const response = await getExcludeReactions(queryParams);
-      setBabyNamesCount(response.count ?? 0);
-      Storage.setBabyNamesCount(response.count);
     } catch (error) {
       console.error('Error fetching data: ', error);
     }
-  }, [seachfilterData, userId, setBabyNamesCount]);
+  }, [seachfilterData, userId]);
 
   // Catalog load when filters / auth change — not on view-mode switch
   useEffect(() => {
@@ -185,13 +177,9 @@ const BabyNamesScreen = ({navigation, route}) => {
   }, [navigation, setSeachfilterData]);
 
   const bumpCountDown = useCallback(async () => {
-    const currentCount = await Storage.getBabyNamesCount();
-    if (currentCount !== null) {
-      const updatedCount = currentCount - 1;
-      setBabyNamesCount(updatedCount);
-      await Storage.setBabyNamesCount(updatedCount);
-    }
-  }, [setBabyNamesCount]);
+    // Catalog total is owned by Discover / getCountFromServer;
+    // list-screen swipes should not decrement it.
+  }, []);
 
   const likeuser = useCallback(
     async id => {
@@ -257,7 +245,7 @@ const BabyNamesScreen = ({navigation, route}) => {
     }
     const lastSwiped = stack[stack.length - 1];
     setSwipedCards(stack.slice(0, -1));
-    setBabyNamesCount(prev => (typeof prev === 'number' ? prev + 1 : 1));
+
     setBabyNamesData(prev => [lastSwiped.card, ...prev]);
 
     const PAYLOAD = {
@@ -282,7 +270,7 @@ const BabyNamesScreen = ({navigation, route}) => {
         })
         .catch(error => console.log('Error undoing dislike:', error));
     }
-  }, [userId, setBabyNamesCount, setIsUndoEnabled]);
+  }, [userId, setIsUndoEnabled]);
 
   const shareNameList = useCallback(name => {
     void shareBabyName(name);

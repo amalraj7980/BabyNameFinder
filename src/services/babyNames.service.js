@@ -27,6 +27,10 @@ import {
   resolveOriginMatchSet,
   resolveOriginQueryTags,
 } from '../constants/countryOriginOptions';
+import {
+  getLikeRecords,
+  getDislikeRecords,
+} from '../store/reactionsStore';
 
 let cachedNames = null;
 let namesUnsubscribe = null;
@@ -36,12 +40,15 @@ let namesCountRequest = null;
 
 /** Dashboard page size. The Discover screen never downloads the full catalog. */
 export const BABY_NAMES_PAGE_SIZE = 20;
+/** One window while filling a Discover page (same idea as commit 5c29282). */
 const CLIENT_FILTER_SCAN_SIZE = 100;
-const MAX_CLIENT_FILTER_SCAN_WINDOWS = 3;
+/** Stop page-fill after this many windows so Apply never walks the whole 33k catalog. */
+const MAX_CLIENT_FILTER_SCAN_WINDOWS = 8;
 
 let filteredDiscoverCache = {
   signature: null,
   names: [],
+  complete: false,
   promise: null,
 };
 
@@ -49,17 +56,28 @@ const resetFilteredDiscoverCache = () => {
   filteredDiscoverCache = {
     signature: null,
     names: [],
+    complete: false,
     promise: null,
   };
 };
 
 const makeFilterSignature = filters =>
   JSON.stringify({
-    startWith: (filters.startWith || '').toString().trim().toLowerCase(),
-    endsWith: (filters.endsWith || '').toString().trim().toLowerCase(),
+    startWith: (filters.startWith || filters.firstLetter || '')
+      .toString()
+      .trim()
+      .toLowerCase(),
+    endsWith: (filters.endsWith || filters.lastLetter || '')
+      .toString()
+      .trim()
+      .toLowerCase(),
     contains: (filters.contains || '').toString().trim().toLowerCase(),
     originQuery: (filters.originQuery || '').toString().trim().toLowerCase(),
-    compoundName: filters.compoundName === true || filters.compoundName === 'true',
+    compoundName:
+      filters.compoundName === true ||
+      filters.compoundName === 'true' ||
+      filters.compoundLetter === true ||
+      filters.compoundLetter === 'true',
     gender: normalizeGenderFilter(filters.gender),
     nameLength: normalizeNameLength(filters.nameLength),
     style: normalizeNameStyle(filters.style),
@@ -132,34 +150,36 @@ const visibleNameLength = name =>
   Array.from(String(name || '').replace(/[\s-]/g, '')).length;
 
 const genderQueryValues = gender => {
+  // Keep `in` lists short — large lists can fail/crash on some Firestore builds.
   if (gender === 'male') {
-    return ['Male', 'Unisex', 'male', 'unisex', 'Boy', 'boy', 'M', 'm'];
+    return ['Male', 'male', 'Boy', 'boy', 'Unisex', 'unisex'];
   }
   if (gender === 'female') {
-    return [
-      'Female',
-      'Unisex',
-      'female',
-      'unisex',
-      'Girl',
-      'girl',
-      'F',
-      'f',
-    ];
+    return ['Female', 'female', 'Girl', 'girl', 'Unisex', 'unisex'];
   }
   if (gender === 'unisex') {
-    return ['Unisex', 'unisex', 'Neutral', 'neutral'];
+    return ['Unisex', 'unisex'];
   }
   return null;
 };
 
 const applyFilters = (names, filters = {}) => {
-  const startWith = (filters.startWith || '').toString().toLowerCase();
-  const endsWith = (filters.endsWith || '').toString().toLowerCase();
-  const contains = (filters.contains || '').toString().toLowerCase();
+  const startWith = (filters.startWith || filters.firstLetter || '')
+    .toString()
+    .trim()
+    .toLowerCase();
+  const endsWith = (filters.endsWith || filters.lastLetter || '')
+    .toString()
+    .trim()
+    .toLowerCase();
+  const contains = (filters.contains || '').toString().trim().toLowerCase();
   const originQuery = (filters.originQuery || '').toString().toLowerCase().trim();
   const gender = normalizeGenderFilter(filters.gender);
-  const compoundName = filters.compoundName;
+  const compoundName =
+    filters.compoundName === true ||
+    filters.compoundName === 'true' ||
+    filters.compoundLetter === true ||
+    filters.compoundLetter === 'true';
   const nameLength = normalizeNameLength(filters.nameLength);
   const style = normalizeNameStyle(filters.style);
 
@@ -291,12 +311,14 @@ const randomDocumentCursor = () => {
 
 const hasActiveFilters = filters =>
   Boolean(
-    (filters.startWith || '').toString().trim() ||
-      (filters.endsWith || '').toString().trim() ||
+    (filters.startWith || filters.firstLetter || '').toString().trim() ||
+      (filters.endsWith || filters.lastLetter || '').toString().trim() ||
       (filters.contains || '').toString().trim() ||
       (filters.originQuery || '').toString().trim() ||
       filters.compoundName === true ||
       filters.compoundName === 'true' ||
+      filters.compoundLetter === true ||
+      filters.compoundLetter === 'true' ||
       (filters.gender && normalizeGenderFilter(filters.gender) !== 'all') ||
       normalizeNameLength(filters.nameLength) !== 'all' ||
       normalizeNameStyle(filters.style) !== 'all' ||
@@ -348,10 +370,19 @@ const cursorId = cursor => {
   return String(cursor);
 };
 
+const titleCasePrefix = value => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+};
+
 const collectFilteredBabyNames = async filters => {
+  // Commit 5c29282: in-memory filter is instant when a catalog snapshot exists.
   if (cachedNames && cachedNames.length > 0) {
     const seen = new Set();
-    return applyFilters(cachedNames, filters).filter(item => {
+    const filtered = applyFilters(cachedNames, filters).filter(item => {
       const id = String(item?.id || '');
       if (!id || seen.has(id)) {
         return false;
@@ -359,72 +390,76 @@ const collectFilteredBabyNames = async filters => {
       seen.add(id);
       return true;
     });
+    return {
+      names: filtered,
+      complete: isCacheCompleteEnough(cachedNamesCount),
+    };
   }
 
-  const matches = [];
-  const seen = new Set();
-  let cursor = null;
-  let hasMore = true;
-  const gender = normalizeGenderFilter(filters.gender);
-  const style = normalizeNameStyle(filters.style);
-  const originQueryTags = resolveOriginQueryTags(filters.origins);
-  const startWith = (filters.startWith || '').toString().trim();
-  const canUsePrefixQuery =
-    style === 'all' &&
-    !originQueryTags &&
-    gender === 'all' &&
-    Boolean(startWith);
+  // No local catalog — do not walk 33k docs. Count/page use server queries instead.
+  return {names: [], complete: false};
+};
 
-  while (hasMore) {
-    const constraints = [];
-    if (style !== 'all') {
-      constraints.push(where('tags', 'array-contains', style));
-    } else if (originQueryTags) {
-      constraints.push(where('tags', 'array-contains-any', originQueryTags));
-    } else if (gender !== 'all') {
-      constraints.push(where('gender', 'in', genderQueryValues(gender)));
-    }
-
-    if (canUsePrefixQuery) {
-      const prefix = startWith.toLocaleUpperCase();
-      constraints.push(orderBy('name'), orderBy(documentId()));
-      if (cursor && typeof cursor === 'object' && cursor.name && cursor.id) {
-        constraints.push(startAfter(cursor.name, cursor.id));
-      } else {
-        constraints.push(startAt(prefix), endAt(`${prefix}\uf8ff`));
-      }
-    } else {
-      constraints.push(orderBy(documentId()));
-      if (typeof cursor === 'string' && cursor.trim()) {
-        constraints.push(startAfter(cursor));
-      }
-    }
-    constraints.push(limit(CLIENT_FILTER_SCAN_SIZE));
-
-    const snapshot = await getDocs(query(babyNamesCollection(), ...constraints));
-    const docs = snapshot.docs || [];
-    if (!docs.length) {
-      break;
-    }
-
-    docs.forEach(docSnap => {
-      const item = mapNameDoc(docSnap);
-      const id = String(item?.id || '');
-      if (!id || seen.has(id)) {
-        return;
-      }
-      if (!applyFilters([item], filters).length) {
-        return;
-      }
-      seen.add(id);
-      matches.push(item);
-    });
-
-    cursor = toPageCursor(docs[docs.length - 1], canUsePrefixQuery);
-    hasMore = docs.length === CLIENT_FILTER_SCAN_SIZE;
+/** Instant page + count from the live in-memory catalog. */
+const paginateFromCachedFiltered = (filters, reactedIds = []) => {
+  const filtering = hasActiveFilters(filters);
+  const requestedSize = Number(filters.pageSize ?? filters.pageCount);
+  const pageSize = Math.max(
+    1,
+    Math.min(
+      Number.isFinite(requestedSize) ? requestedSize : BABY_NAMES_PAGE_SIZE,
+      100,
+    ),
+  );
+  const reactedSet = new Set((reactedIds || []).map(String).filter(Boolean));
+  const sessionExclude = new Set(
+    (Array.isArray(filters.excludeIds) ? filters.excludeIds : [])
+      .map(String)
+      .filter(Boolean),
+  );
+  let allMatching = applyFilters(cachedNames || [], filters);
+  const startId = cursorId(filters.cursor);
+  // Fresh unfiltered deck: shuffle so reset feels like a new browse session.
+  if (!filtering && !startId) {
+    allMatching = shuffleArray(allMatching);
+  }
+  const available = allMatching.filter(
+    item => !reactedSet.has(String(item.id)),
+  );
+  let startIndex = 0;
+  if (startId) {
+    const cursorIndex = allMatching.findIndex(
+      item => String(item.id) === startId,
+    );
+    startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
   }
 
-  return matches;
+  const babyNames = [];
+  let index = startIndex;
+  while (index < allMatching.length && babyNames.length < pageSize) {
+    const item = allMatching[index];
+    index += 1;
+    const id = String(item.id);
+    if (reactedSet.has(id) || sessionExclude.has(id)) {
+      continue;
+    }
+    babyNames.push(item);
+  }
+
+  const hasMore = allMatching.slice(index).some(item => {
+    const id = String(item.id);
+    return !reactedSet.has(id) && !sessionExclude.has(id);
+  });
+  const lastExamined = index > 0 ? allMatching[index - 1] : null;
+  const cacheComplete = isCacheCompleteEnough(cachedNamesCount);
+  return {
+    babyNames,
+    nextCursor: hasMore && lastExamined ? lastExamined.id : null,
+    hasMore,
+    // Never treat a truncated in-memory snapshot (~25k of 33k+) as exact.
+    namesCount: filtering ? available.length : undefined,
+    exact: filtering && cacheComplete,
+  };
 };
 
 const getFilteredDiscoverNames = async filters => {
@@ -434,7 +469,7 @@ const getFilteredDiscoverNames = async filters => {
     Array.isArray(filteredDiscoverCache.names) &&
     !filteredDiscoverCache.promise
   ) {
-    return filteredDiscoverCache.names;
+    return {names: filteredDiscoverCache.names, complete: filteredDiscoverCache.complete};
   }
   if (
     filteredDiscoverCache.signature === signature &&
@@ -444,15 +479,16 @@ const getFilteredDiscoverNames = async filters => {
   }
 
   const promise = collectFilteredBabyNames(filters)
-    .then(names => {
+    .then(result => {
       if (filteredDiscoverCache.promise === promise) {
         filteredDiscoverCache = {
           signature,
-          names,
+          names: result.names,
+          complete: result.complete,
           promise: null,
         };
       }
-      return names;
+      return result;
     })
     .catch(error => {
       if (filteredDiscoverCache.promise === promise) {
@@ -464,6 +500,7 @@ const getFilteredDiscoverNames = async filters => {
   filteredDiscoverCache = {
     signature,
     names: [],
+    complete: false,
     promise,
   };
   return promise;
@@ -484,7 +521,7 @@ const paginateFilteredDiscoverNames = async (filters, reactedIds = []) => {
       .map(String)
       .filter(Boolean),
   );
-  const allMatching = await getFilteredDiscoverNames(filters);
+  const {names: allMatching, complete: scanComplete} = await getFilteredDiscoverNames(filters);
   const available = allMatching.filter(item => !reactedSet.has(String(item.id)));
   const startId = cursorId(filters.cursor);
   let startIndex = 0;
@@ -519,37 +556,190 @@ const paginateFilteredDiscoverNames = async (filters, reactedIds = []) => {
     nextCursor: hasMore && lastExamined ? lastExamined.id : null,
     hasMore,
     namesCount: available.length,
-    exact: true,
+    exact: scanComplete,
   };
 };
 
+const isCacheCompleteEnough = catalogTotal => {
+  if (!cachedNames || cachedNames.length === 0) {
+    return false;
+  }
+  const total =
+    typeof catalogTotal === 'number' && catalogTotal > 0
+      ? catalogTotal
+      : typeof cachedNamesCount === 'number' && cachedNamesCount > 0
+        ? cachedNamesCount
+        : null;
+  if (total == null) {
+    return false;
+  }
+  return cachedNames.length >= total * 0.97;
+};
+
 /**
- * Exact count of names matching the selected filters, after liked/disliked
- * names are excluded. Used by Discover so the banner never shows a page-size
- * estimate such as 20.
+ * Fast remaining count: Firestore aggregates when the filter is expressible,
+ * otherwise an in-memory pass like commit 5c29282. Never scans the full
+ * catalog document-by-document (that took 5+ minutes).
  */
 export const getBabyNamesFilteredCount = async (filters = {}, reactedIds = []) => {
   if (!hasActiveFilters(filters)) {
     return {namesCount: null, exact: false};
   }
+
   const reactedSet = new Set((reactedIds || []).map(String).filter(Boolean));
-  const names = await getFilteredDiscoverNames(filters);
-  const namesCount = names.filter(item => !reactedSet.has(String(item.id))).length;
-  return {namesCount, exact: true};
+  const subtractReacted = (matchTotal, exact) => {
+    let exclude = 0;
+    if (reactedSet.size) {
+      const records = [...getLikeRecords(), ...getDislikeRecords()].filter(
+        item => item && reactedSet.has(String(item.id)),
+      );
+      if (records.length) {
+        exclude = applyFilters(records, filters).length;
+      } else if (cachedNames?.length) {
+        exclude = applyFilters(cachedNames, filters).filter(item =>
+          reactedSet.has(String(item.id)),
+        ).length;
+      }
+    }
+    return {
+      namesCount: Math.max(0, Number(matchTotal) - exclude),
+      exact,
+      matchTotal: Number(matchTotal),
+    };
+  };
+
+  if (cachedNames && cachedNames.length > 0) {
+    const {names, complete} = await getFilteredDiscoverNames(filters);
+    const namesCount = names.filter(item => !reactedSet.has(String(item.id)))
+      .length;
+    return {namesCount, exact: complete, matchTotal: names.length};
+  }
+
+  const gender = normalizeGenderFilter(filters.gender);
+  const style = normalizeNameStyle(filters.style);
+  const originQueryTags = resolveOriginQueryTags(filters.origins);
+  const startWith = (filters.startWith || filters.firstLetter || '')
+    .toString()
+    .trim();
+  const needsClient = requiresClientSideScan(filters);
+
+  const countWith = async constraints => {
+    const snap = await getCountFromServer(
+      query(babyNamesCollection(), ...constraints),
+    );
+    return Number(snap.data()?.count);
+  };
+
+  try {
+    if (!needsClient && style !== 'all') {
+      const n = await countWith([where('tags', 'array-contains', style)]);
+      if (Number.isFinite(n)) {
+        return subtractReacted(n, true);
+      }
+    } else if (!needsClient && originQueryTags) {
+      const n = await countWith([
+        where('tags', 'array-contains-any', originQueryTags),
+      ]);
+      if (Number.isFinite(n)) {
+        return subtractReacted(n, true);
+      }
+    } else if (!needsClient && gender !== 'all') {
+      const values = [...new Set(genderQueryValues(gender) || [])];
+      const parts = await Promise.all(
+        values.map(async value => {
+          try {
+            return await countWith([where('gender', '==', value)]);
+          } catch (e) {
+            return 0;
+          }
+        }),
+      );
+      const n = parts.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
+      if (Number.isFinite(n)) {
+        return subtractReacted(n, true);
+      }
+    } else if (startWith && !needsClient) {
+      const title = titleCasePrefix(startWith);
+      const lower = startWith.toLowerCase();
+      const variants = [...new Set([title, lower].filter(Boolean))];
+      const parts = await Promise.all(
+        variants.map(async prefix => {
+          try {
+            return await countWith([
+              orderBy('name'),
+              startAt(prefix),
+              endAt(`${prefix}\uf8ff`),
+            ]);
+          } catch (e) {
+            return 0;
+          }
+        }),
+      );
+      const n = parts.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
+      if (n > 0) {
+        return subtractReacted(n, true);
+      }
+    }
+  } catch (e) {
+    console.warn('filtered count aggregate failed:', e?.message || e);
+  }
+
+  if (startWith) {
+    try {
+      const title = titleCasePrefix(startWith);
+      const n = await countWith([
+        orderBy('name'),
+        startAt(title),
+        endAt(`${title}\uf8ff`),
+      ]);
+      if (Number.isFinite(n) && n >= 0) {
+        return subtractReacted(n, !needsClient);
+      }
+    } catch (e) {
+      // ignore — fall through
+    }
+  }
+
+  // Client-only filters (contains/endsWith/…) without a local catalog: do not
+  // block Apply for minutes. The deck still uses a bounded page query.
+  return {namesCount: null, exact: false};
+};
+
+/** Unfiltered remaining = full DB total - all liked/disliked ids. */
+export const getBabyNamesRemainingCount = async (reactedIds = []) => {
+  const reactedSet = new Set((reactedIds || []).map(String).filter(Boolean));
+  const {namesCount: catalogTotal} = await getNamesCount({
+    forceRefresh: typeof cachedNamesCount !== 'number' || cachedNamesCount <= 0,
+  });
+  const total = Number(catalogTotal);
+  if (!Number.isFinite(total)) {
+    return {namesCount: null, exact: false, catalogTotal: null};
+  }
+  return {
+    namesCount: Math.max(0, total - reactedSet.size),
+    exact: true,
+    catalogTotal: total,
+  };
 };
 
 /**
- * Reads a small, cursor-based catalog page. The cursor is a Firestore document
- * id so it is safe to keep in screen state/ref and does not require caching the
- * full catalog locally. Unfiltered Discover pages start at a random document
- * and shuffle the visible cards so reloads do not follow a fixed order.
- * Explicit filters collect every matching name so Discover can show an exact
- * count after like/dislike exclusions, then page through only those names.
+ * Reads a small, cursor-based catalog page. Explicit filters collect every
+ * matching name for an exact count, then page through those names. Unfiltered
+ * Discover pages use a bounded cursor read (cache when available).
  */
 export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
   const filtering = hasActiveFilters(filters);
-  if (filtering) {
-    return paginateFilteredDiscoverNames(filters, reactedIds);
+
+  // Instant in-memory pages when a local catalog snapshot exists (commit 5c29282).
+  if (cachedNames && cachedNames.length > 0) {
+    const page = paginateFromCachedFiltered(filters, reactedIds);
+    if (!filtering && !cursorId(filters.cursor)) {
+      return {
+        ...page,
+        babyNames: shuffleArray(page.babyNames),
+      };
+    }
+    return page;
   }
 
   if (!filters.cursor) {
@@ -571,7 +761,7 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
     [...(reactedIds || []), ...extraExclude].map(String).filter(Boolean),
   );
   const unfiltered = !filtering;
-  const clientSideScan = requiresClientSideScan(filters);
+  const clientSideScan = filtering || requiresClientSideScan(filters);
   const babyNames = [];
   let cursor = filters.cursor || null;
   let hasMore = true;
@@ -580,12 +770,18 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
   const gender = normalizeGenderFilter(filters.gender);
   const style = normalizeNameStyle(filters.style);
   const originQueryTags = resolveOriginQueryTags(filters.origins);
-  const startWith = (filters.startWith || '').toString().trim();
+  const startWith = (filters.startWith || filters.firstLetter || '')
+    .toString()
+    .trim();
   const canUsePrefixQuery =
     style === 'all' &&
     !originQueryTags &&
     gender === 'all' &&
     Boolean(startWith);
+  let usePrefixQuery = canUsePrefixQuery;
+  const maxScanWindows = filtering
+    ? MAX_CLIENT_FILTER_SCAN_WINDOWS
+    : MAX_CLIENT_FILTER_SCAN_WINDOWS;
 
   if (unfiltered && (cursor === null || cursor === undefined || cursor === '')) {
     cursor =
@@ -608,13 +804,11 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
     babyNames.push(...matches.map(({item}) => item));
   };
 
-  // A new guest with no filters reads exactly 20 documents once. If a filter
-  // or prior reactions remove candidates, read further 20-document chunks
-  // only until the screen has a full visible page or the catalog is exhausted.
+  // Bounded reads only — fill one Discover page, never scan the whole catalog.
   while (
     hasMore &&
     babyNames.length < pageSize &&
-    (!clientSideScan || clientScanWindows < MAX_CLIENT_FILTER_SCAN_WINDOWS)
+    (!clientSideScan || clientScanWindows < maxScanWindows)
   ) {
     const constraints = [];
     if (style !== 'all') {
@@ -627,11 +821,14 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
       constraints.push(where('gender', 'in', genderQueryValues(gender)));
     }
 
-    if (canUsePrefixQuery) {
-      const prefix = startWith.toLocaleUpperCase();
-      constraints.push(orderBy('name'), orderBy(documentId()));
-      if (cursor && typeof cursor === 'object' && cursor.name && cursor.id) {
-        constraints.push(startAfter(cursor.name, cursor.id));
+    if (usePrefixQuery) {
+      const prefix = titleCasePrefix(startWith);
+      constraints.push(orderBy('name'));
+      if (cursor && typeof cursor === 'object' && cursor.name) {
+        constraints.push(
+          startAfter(cursor.name),
+          endAt(`${prefix}\uf8ff`),
+        );
       } else {
         constraints.push(startAt(prefix), endAt(`${prefix}\uf8ff`));
       }
@@ -646,9 +843,17 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
       : pageSize;
     constraints.push(limit(readSize));
 
-    const snapshot = await getDocs(
-      query(babyNamesCollection(), ...constraints),
-    );
+    let snapshot;
+    try {
+      snapshot = await getDocs(query(babyNamesCollection(), ...constraints));
+    } catch (e) {
+      if (usePrefixQuery) {
+        usePrefixQuery = false;
+        cursor = null;
+        continue;
+      }
+      throw e;
+    }
     if (clientSideScan) {
       clientScanWindows += 1;
     }
@@ -674,11 +879,9 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
     if (matches.length >= remaining) {
       const selected = matches.slice(0, remaining);
       commitMatches(selected);
-      // Do not skip matching names found later in a 100-document client scan.
-      // The next page resumes after the last item actually displayed.
       cursor = toPageCursor(
         selected[selected.length - 1].docSnap,
-        canUsePrefixQuery,
+        usePrefixQuery,
       );
       hasMore =
         selected[selected.length - 1].docSnap.id !== docs[docs.length - 1].id ||
@@ -688,7 +891,7 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
     }
 
     commitMatches(matches);
-    cursor = toPageCursor(docs[docs.length - 1], canUsePrefixQuery);
+    cursor = toPageCursor(docs[docs.length - 1], usePrefixQuery);
     if (docs.length === readSize) {
       hasMore = true;
     } else if (unfiltered && !wrappedToStart) {
@@ -706,6 +909,8 @@ export const getBabyNamesPage = async (filters = {}, reactedIds = []) => {
       : babyNames.slice(0, pageSize),
     nextCursor: hasMore ? cursor : null,
     hasMore,
+    namesCount: filtering ? babyNames.length : undefined,
+    exact: false,
   };
 };
 
@@ -801,25 +1006,43 @@ export const forceSeedBabyNames = async () => {
 
 export const seedBabyNamesIfNeeded = async () => forceSeedBabyNames();
 
+/**
+ * Do NOT attach an onSnapshot to the full baby_names collection.
+ * With 30k+ docs that freezes/crashes the app and still only partially fills
+ * memory (~25k), which then poisons banner counts.
+ * Counts use getCountFromServer; pages use bounded queries.
+ */
 export const startBabyNamesLiveSync = () => {
-  if (namesUnsubscribe) {
-    return namesUnsubscribe;
-  }
-  namesUnsubscribe = babyNamesCollection().onSnapshot(
-    snapshot => {
-      cachedNames = mapAndDedupeNames(snapshot.docs);
-      console.log(`baby_names live: ${cachedNames.length} names`);
-      notifyListeners(cachedNames);
-    },
-    error => {
-      console.log('baby_names live sync error:', error?.message || error);
-    },
-  );
   return namesUnsubscribe;
 };
 
+/** Resolve once a local catalog snapshot exists (or after timeout). */
+const waitForCachedNames = (timeoutMs = 6000) =>
+  new Promise(resolve => {
+    if (cachedNames && cachedNames.length > 0) {
+      resolve(cachedNames);
+      return;
+    }
+    let settled = false;
+    const finish = value => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      nameListeners.delete(onUpdate);
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const onUpdate = names => {
+      if (Array.isArray(names) && names.length > 0) {
+        finish(names);
+      }
+    };
+    nameListeners.add(onUpdate);
+    const timer = setTimeout(() => finish(cachedNames), timeoutMs);
+  });
+
 export const subscribeBabyNames = listener => {
-  startBabyNamesLiveSync();
   nameListeners.add(listener);
   if (cachedNames) {
     listener(cachedNames);
@@ -828,28 +1051,30 @@ export const subscribeBabyNames = listener => {
 };
 
 export const fetchAllBabyNames = async ({forceRefresh = false} = {}) => {
-  startBabyNamesLiveSync();
-
   if (!forceRefresh && cachedNames && cachedNames.length > 0) {
     return cachedNames;
   }
 
-  const snap = await babyNamesCollection().get();
-  cachedNames = mapAndDedupeNames(snap.docs);
-  console.log(`baby_names fetched: ${cachedNames.length}`);
-
-  if (cachedNames.length === 0) {
-    console.warn(
-      'baby_names is empty. Add docs in Console (like Ava) or allow signed-in write to bootstrap.',
-    );
+  try {
+    const snap = await babyNamesCollection().get();
+    cachedNames = mapAndDedupeNames(snap.docs);
+    console.log(`baby_names fetched: ${cachedNames.length}`);
+    if (cachedNames.length === 0) {
+      console.warn(
+        'baby_names is empty. Add docs in Console or allow signed-in write to bootstrap.',
+      );
+    }
+    notifyListeners(cachedNames);
+    return cachedNames;
+  } catch (e) {
+    console.warn('baby_names fetch failed:', e?.message || e);
+    return cachedNames || [];
   }
-
-  notifyListeners(cachedNames);
-  return cachedNames;
 };
 
 export const clearNamesCache = () => {
   cachedNames = null;
+  cachedNamesCount = null;
   resetFilteredDiscoverCache();
 };
 
@@ -879,34 +1104,50 @@ export const getBabyNamesExcludingReactions = async (
 
 export const getNamesCount = async (options = {}) => {
   const forceRefresh = options?.forceRefresh === true;
-  if (!forceRefresh && typeof cachedNamesCount === 'number') {
+  if (!forceRefresh && typeof cachedNamesCount === 'number' && cachedNamesCount > 0) {
     return {namesCount: cachedNamesCount};
   }
 
-  // A tab-focus refresh and the initial page load can happen together. Share
-  // one aggregate request so the dashboard does not issue duplicate reads.
+  // Share one in-flight aggregate so Discover focus + fetch don't double-hit.
   if (namesCountRequest) {
     return namesCountRequest;
   }
 
   namesCountRequest = (async () => {
+    let serverCount = null;
     try {
       const countSnapshot = await getCountFromServer(babyNamesCollection());
-      const namesCount = countSnapshot.data().count;
-      if (typeof namesCount === 'number') {
+      const namesCount = Number(countSnapshot.data()?.count);
+      if (Number.isFinite(namesCount) && namesCount >= 0) {
+        serverCount = namesCount;
         cachedNamesCount = namesCount;
+        void syncMetaCount(namesCount);
         return {namesCount};
       }
     } catch (e) {
-      // Firestore aggregation is unavailable only on older/emulated backends.
+      console.warn('getCountFromServer failed:', e?.message || e);
     }
     try {
       const stats = await metaDocument('global').get();
       if (stats.exists && typeof stats.data()?.namesCount === 'number') {
-        return {namesCount: stats.data().namesCount};
+        const metaCount = Number(stats.data().namesCount);
+        // Prefer the higher of meta vs any prior cache — never stick on a
+        // stale ~25k after the DB grew to 33k+.
+        const best = Math.max(
+          metaCount,
+          typeof cachedNamesCount === 'number' ? cachedNamesCount : 0,
+          serverCount || 0,
+        );
+        if (best > 0) {
+          cachedNamesCount = best;
+          return {namesCount: best};
+        }
       }
     } catch (e) {
-      // No full-catalog fallback: opening Discover must stay a bounded read.
+      // ignore
+    }
+    if (typeof cachedNamesCount === 'number' && cachedNamesCount > 0) {
+      return {namesCount: cachedNamesCount};
     }
     return {namesCount: 0};
   })();

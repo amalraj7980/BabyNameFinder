@@ -93,6 +93,7 @@ export const AppContextProvider = ({children}) => {
     origins: [],
     search: false,
   });
+  const [discoverFilterBusy, setDiscoverFilterBusy] = useState(false);
   const [isPrime, setIsPrime] = useState(false); // Initialize to false
   const [swipeBlocked, setSwipeBlocked] = useState(false);
   const [deviceId, setDeviceId] = useState();
@@ -388,6 +389,8 @@ export const AppContextProvider = ({children}) => {
       setSeachfilterDataWholeNames,
       seachfilterData,
       setSeachfilterData,
+      discoverFilterBusy,
+      setDiscoverFilterBusy,
       mainSeachfilterData,
       setMainSeachfilterData,
       likeCount,
@@ -417,6 +420,7 @@ export const AppContextProvider = ({children}) => {
       countryCode,
       seachfilterDataWholeNames,
       seachfilterData,
+      discoverFilterBusy,
       mainSeachfilterData,
       likeCount,
       dislikeCount,

@@ -20,6 +20,7 @@ import {Fonts} from '../../styles';
 import {DesignTokens as T} from '../../theme/designTokens';
 import {getTabBarStyle} from '../../routes/tabBarStyles';
 import {COUNTRY_ORIGIN_OPTIONS} from '../../constants/countryOriginOptions';
+import {NamesLoadingState} from '../../components/NamesLoadingState';
 
 const C = T.colors;
 
@@ -84,7 +85,8 @@ const FilterField = memo(function FilterField({
 
 export default function NameFilterSearch({navigation}) {
   const insets = useSafeAreaInsets();
-  const {seachfilterData, setSeachfilterData} = useContext(AppContext);
+  const {seachfilterData, setSeachfilterData, setDiscoverFilterBusy} =
+    useContext(AppContext);
 
   // Local draft avoids AppContext re-renders fighting TextInput focus
   const [draft, setDraft] = useState({
@@ -98,6 +100,7 @@ export default function NameFilterSearch({navigation}) {
     gender: 'all',
     origins: [],
   });
+  const [isApplying, setIsApplying] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -148,7 +151,12 @@ export default function NameFilterSearch({navigation}) {
   }, []);
 
   const handleApply = useCallback(() => {
+    if (isApplying) {
+      return;
+    }
     Keyboard.dismiss();
+    setIsApplying(true);
+    setDiscoverFilterBusy(true);
     setSeachfilterData(prev => ({
       ...prev,
       firstLetter: (draft.firstLetter || '').trim(),
@@ -162,10 +170,22 @@ export default function NameFilterSearch({navigation}) {
       origins: Array.isArray(draft.origins) ? draft.origins : [],
       search: false,
     }));
-    navigation.goBack();
-  }, [draft, navigation, setSeachfilterData]);
+    // Brief overlay so Discover can mount the matching loader before pop.
+    setTimeout(() => {
+      navigation.goBack();
+    }, 280);
+  }, [
+    draft,
+    isApplying,
+    navigation,
+    setDiscoverFilterBusy,
+    setSeachfilterData,
+  ]);
 
   const handleReset = useCallback(() => {
+    if (isApplying) {
+      return;
+    }
     const cleared = {
       firstLetter: '',
       lastLetter: '',
@@ -177,12 +197,18 @@ export default function NameFilterSearch({navigation}) {
       gender: 'all',
       origins: [],
     };
+    Keyboard.dismiss();
+    setIsApplying(true);
+    setDiscoverFilterBusy(true);
     setDraft(cleared);
     setSeachfilterData({
       ...cleared,
       search: false,
     });
-  }, [setSeachfilterData]);
+    setTimeout(() => {
+      navigation.goBack();
+    }, 280);
+  }, [isApplying, navigation, setDiscoverFilterBusy, setSeachfilterData]);
 
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12);
   const allOriginsSelected = !(draft.origins && draft.origins.length);
@@ -201,10 +227,14 @@ export default function NameFilterSearch({navigation}) {
         <Text style={styles.headerTitle}>Filter</Text>
         <TouchableOpacity
           onPress={handleReset}
+          disabled={isApplying}
           hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
           accessibilityRole="button"
           accessibilityLabel="Reset filters">
-          <Text style={styles.resetText}>Reset</Text>
+          <Text
+            style={[styles.resetText, isApplying && styles.resetTextDisabled]}>
+            Reset
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -411,15 +441,24 @@ export default function NameFilterSearch({navigation}) {
 
         <View style={[styles.footer, {paddingBottom: bottomPad}]}>
           <TouchableOpacity
-            style={styles.applyBtn}
+            style={[styles.applyBtn, isApplying && styles.applyBtnDisabled]}
             onPress={handleApply}
             activeOpacity={0.88}
+            disabled={isApplying}
             accessibilityRole="button"
             accessibilityLabel="Apply filters">
-            <Text style={styles.applyText}>Apply filters</Text>
+            <Text style={styles.applyText}>
+              {isApplying ? 'Applying…' : 'Apply filters'}
+            </Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {isApplying ? (
+        <View style={styles.applyingOverlay} pointerEvents="auto">
+          <NamesLoadingState message="Applying filters…" />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -471,6 +510,9 @@ const styles = StyleSheet.create({
     color: C.primary,
     minWidth: 48,
     textAlign: 'right',
+  },
+  resetTextDisabled: {
+    opacity: 0.45,
   },
   content: {
     paddingHorizontal: 16,
@@ -598,9 +640,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  applyBtnDisabled: {
+    opacity: 0.72,
+  },
   applyText: {
     fontFamily: Fonts.bold,
     fontSize: 15,
     color: '#FFFFFF',
+  },
+  applyingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(247,239,232,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
   },
 });

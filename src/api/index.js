@@ -11,6 +11,7 @@ import {
   getBabyNames,
   getBabyNamesPage,
   getBabyNamesFilteredCount,
+  getBabyNamesRemainingCount,
   getBabyNamesExcludingReactions,
   getNamesCount,
   seedBabyNamesIfNeeded,
@@ -91,6 +92,15 @@ export const getFilteredNamesCount = async (filters = {}) => {
     ...new Set([...liveIds, ...extraIds].map(String).filter(Boolean)),
   ];
   return getBabyNamesFilteredCount(filters, allIds);
+};
+
+export const getRemainingNamesCount = async (filters = {}) => {
+  const {allIds: liveIds} = await getReactedNameIds();
+  const extraIds = Array.isArray(filters.reactedIds) ? filters.reactedIds : [];
+  const allIds = [
+    ...new Set([...liveIds, ...extraIds].map(String).filter(Boolean)),
+  ];
+  return getBabyNamesRemainingCount(allIds);
 };
 
 export const getReactions = async (userId, filters = {}) =>

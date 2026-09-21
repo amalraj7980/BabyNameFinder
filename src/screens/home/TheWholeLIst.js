@@ -87,7 +87,6 @@ const TheWholeLIst = ({navigation, route}) => {
         compoundName: seachfilterDataWholeNames?.compoundLetter ?? false,
         gender: seachfilterDataWholeNames?.gender ?? 'all',
         contains: seachfilterDataWholeNames?.contains ?? '',
-        forceRefresh: true,
       };
       try {
         const data = await getAllBabyNames(queryParams);
