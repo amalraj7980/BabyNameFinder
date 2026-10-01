@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useContext,
   useCallback,
+  useMemo,
 } from 'react';
 import {
   View,
@@ -56,6 +57,18 @@ const CARD_HEIGHT_SIMPLE = Math.min(SCREEN_H * 0.30, 280);
 const CARD_H_MARGIN = (SCREEN_W - CARD_WIDTH) / 2;
 const DISCOVER_PAGE_SIZE = 20;
 const PREFETCH_REMAINING_CARDS = 4;
+/** Overlay wash + PASS/LIKE appear from a small drag, fully visible at ~10% swipe. */
+const OVERLAY_FADE_START = Math.max(10, SCREEN_W * 0.03);
+const OVERLAY_VISIBLE_AT = SCREEN_W * 0.1;
+const OVERLAY_OPACITY_INPUT_X = [
+  -OVERLAY_VISIBLE_AT,
+  -OVERLAY_FADE_START,
+  0,
+  OVERLAY_FADE_START,
+  OVERLAY_VISIBLE_AT,
+];
+const OVERLAY_OPACITY_OUTPUT_X = [1, 0.55, 0, 0.55, 1];
+const ACTION_OUTLINE_FULL_AT = SCREEN_W * 0.22;
 
 const hasSelectedFilters = filters =>
   Boolean(
@@ -275,54 +288,128 @@ const normalizeDeckCards = (names = [], excludeIds) => {
   return unique;
 };
 
+const overlayUi = StyleSheet.create({
+  layer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  wash: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: '56%',
+  },
+  washPass: {
+    left: 0,
+    borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
+  },
+  washLike: {
+    right: 0,
+    borderTopRightRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  stampDock: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+  },
+  stampDockPass: {
+    alignItems: 'flex-start',
+    paddingLeft: 18,
+  },
+  stampDockLike: {
+    alignItems: 'flex-end',
+    paddingRight: 18,
+  },
+  stamp: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  stampPass: {
+    backgroundColor: C.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: C.primary,
+        shadowOffset: {width: -4, height: 6},
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+      },
+      android: {elevation: 8},
+    }),
+  },
+  stampLike: {
+    backgroundColor: C.success,
+    ...Platform.select({
+      ios: {
+        shadowColor: C.success,
+        shadowOffset: {width: 4, height: 6},
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+      },
+      android: {elevation: 8},
+    }),
+  },
+  stampText: {
+    color: C.surface,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+});
+
+const OVERLAY_WRAPPER = {
+  width: '100%',
+  height: '100%',
+};
+
 const OVERLAY_LABELS = {
   left: {
     title: 'PASS',
-    style: {
-      label: {
-        backgroundColor: 'transparent',
-        borderColor: C.primary,
-        color: C.primary,
-        borderWidth: 2.5,
-        fontSize: 22,
-        fontWeight: '800',
-        borderRadius: 8,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        overflow: 'hidden',
-      },
-      wrapper: {
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        justifyContent: 'flex-start',
-        marginTop: 28,
-        marginLeft: -18,
-      },
-    },
+    element: (
+      <View style={overlayUi.layer} pointerEvents="none">
+        <LinearGradient
+          colors={[
+            'rgba(193, 123, 116, 0.42)',
+            'rgba(193, 123, 116, 0.16)',
+            'transparent',
+          ]}
+          locations={[0, 0.5, 1]}
+          start={{x: 0, y: 0.5}}
+          end={{x: 1, y: 0.5}}
+          style={[overlayUi.wash, overlayUi.washPass]}
+        />
+        <View style={[overlayUi.stampDock, overlayUi.stampDockPass]}>
+          <View style={[overlayUi.stamp, overlayUi.stampPass]}>
+            <Text style={overlayUi.stampText}>PASS</Text>
+          </View>
+        </View>
+      </View>
+    ),
+    style: {wrapper: OVERLAY_WRAPPER},
   },
   right: {
     title: 'LIKE',
-    style: {
-      label: {
-        backgroundColor: 'transparent',
-        borderColor: '#34C759',
-        color: '#34C759',
-        borderWidth: 2.5,
-        fontSize: 22,
-        fontWeight: '800',
-        borderRadius: 8,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        overflow: 'hidden',
-      },
-      wrapper: {
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        justifyContent: 'flex-start',
-        marginTop: 28,
-        marginLeft: 18,
-      },
-    },
+    element: (
+      <View style={overlayUi.layer} pointerEvents="none">
+        <LinearGradient
+          colors={[
+            'rgba(52, 199, 89, 0.42)',
+            'rgba(52, 199, 89, 0.16)',
+            'transparent',
+          ]}
+          locations={[0, 0.5, 1]}
+          start={{x: 1, y: 0.5}}
+          end={{x: 0, y: 0.5}}
+          style={[overlayUi.wash, overlayUi.washLike]}
+        />
+        <View style={[overlayUi.stampDock, overlayUi.stampDockLike]}>
+          <View style={[overlayUi.stamp, overlayUi.stampLike]}>
+            <Text style={overlayUi.stampText}>LIKE</Text>
+          </View>
+        </View>
+      </View>
+    ),
+    style: {wrapper: OVERLAY_WRAPPER},
   },
 };
 
@@ -361,6 +448,7 @@ const DiscoverScreen = ({navigation}) => {
   const [localName, setLocalName] = useState('');
 
   const swiperRef = useRef(null);
+  const swipeProgress = useRef(new Animated.Value(0)).current;
   const loadingRequestId = useRef(0);
   const hasLoadedOnceRef = useRef(false);
   const babyNamesDataRef = useRef(babyNamesData);
@@ -384,6 +472,36 @@ const DiscoverScreen = ({navigation}) => {
   const cardStyle = discoverCardStyle || 'detailed';
   const isSimple = cardStyle === 'simple';
   const cardHeight = isSimple ? CARD_HEIGHT_SIMPLE : CARD_HEIGHT_DETAILED;
+
+  const likeOutlineOpacity = useMemo(
+    () =>
+      swipeProgress.interpolate({
+        inputRange: [0, ACTION_OUTLINE_FULL_AT],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+    [swipeProgress],
+  );
+  const passOutlineOpacity = useMemo(
+    () =>
+      swipeProgress.interpolate({
+        inputRange: [-ACTION_OUTLINE_FULL_AT, 0],
+        outputRange: [1, 0],
+        extrapolate: 'clamp',
+      }),
+    [swipeProgress],
+  );
+
+  const onSwiping = useCallback(
+    x => {
+      swipeProgress.setValue(x);
+    },
+    [swipeProgress],
+  );
+
+  const clearSwipeProgress = useCallback(() => {
+    swipeProgress.setValue(0);
+  }, [swipeProgress]);
 
   const refreshProfile = useCallback(async () => {
     const name = await getDisplayName();
@@ -1285,11 +1403,19 @@ const DiscoverScreen = ({navigation}) => {
                 stackSeparation={10}
                 stackScale={4}
                 animateCardOpacity
+                animateOverlayLabelsOpacity
+                overlayOpacityHorizontalThreshold={OVERLAY_FADE_START}
+                inputOverlayLabelsOpacityRangeX={OVERLAY_OPACITY_INPUT_X}
+                outputOverlayLabelsOpacityRangeX={OVERLAY_OPACITY_OUTPUT_X}
+                overlayLabelWrapperStyle={styles.overlayLabelWrapper}
                 verticalSwipe={false}
                 disableTopSwipe
                 disableBottomSwipe
                 swipeBackCard
                 useViewOverflow={false}
+                onSwiping={onSwiping}
+                onSwiped={clearSwipeProgress}
+                onSwipedAborted={clearSwipeProgress}
                 onSwipedLeft={onSwipedLeft}
                 onSwipedRight={onSwipedRight}
                 renderCard={renderCard}
@@ -1300,13 +1426,23 @@ const DiscoverScreen = ({navigation}) => {
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.passBtn}
-            onPress={onPassPress}
-            accessibilityRole="button"
-            accessibilityLabel="Pass">
-            <Ionicons name="close" size={26} color={C.primary} />
-          </TouchableOpacity>
+          <View style={styles.passBtnWrap}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.actionOutline,
+                styles.passOutline,
+                {opacity: passOutlineOpacity},
+              ]}
+            />
+            <TouchableOpacity
+              style={styles.passBtn}
+              onPress={onPassPress}
+              accessibilityRole="button"
+              accessibilityLabel="Pass">
+              <Ionicons name="close" size={26} color={C.primary} />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[
@@ -1321,13 +1457,23 @@ const DiscoverScreen = ({navigation}) => {
             <Ionicons name="arrow-undo" size={18} color={C.textMuted} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.likeBtn}
-            onPress={onLikePress}
-            accessibilityRole="button"
-            accessibilityLabel="Like">
-            <Ionicons name="heart" size={28} color={C.surface} />
-          </TouchableOpacity>
+          <View style={styles.likeBtnWrap}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.actionOutline,
+                styles.likeOutline,
+                {opacity: likeOutlineOpacity},
+              ]}
+            />
+            <TouchableOpacity
+              style={styles.likeBtn}
+              onPress={onLikePress}
+              accessibilityRole="button"
+              accessibilityLabel="Like">
+              <Ionicons name="heart" size={28} color={C.surface} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1535,6 +1681,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  overlayLabelWrapper: {
+    position: 'absolute',
+    backgroundColor: 'transparent',
+    zIndex: 2,
+    width: '100%',
+    height: '100%',
+  },
   card: {
     width: CARD_WIDTH,
     backgroundColor: C.surface,
@@ -1644,6 +1797,35 @@ const styles = StyleSheet.create({
     marginTop: 22,
     paddingBottom: 8,
     zIndex: 3,
+  },
+  passBtnWrap: {
+    width: 72,
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  likeBtnWrap: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionOutline: {
+    position: 'absolute',
+    borderWidth: 3,
+    backgroundColor: 'transparent',
+  },
+  passOutline: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderColor: C.primary,
+  },
+  likeOutline: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderColor: C.success,
   },
   passBtn: {
     width: 58,
