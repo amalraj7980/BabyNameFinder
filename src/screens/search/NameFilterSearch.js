@@ -1,4 +1,11 @@
-import React, {useState, useContext, useEffect, useCallback, memo} from 'react';
+import React, {
+  useState,
+  useContext,
+  useEffect,
+  useCallback,
+  useRef,
+  memo,
+} from 'react';
 import {
   Text,
   View,
@@ -11,6 +18,8 @@ import {
   KeyboardAvoidingView,
   Pressable,
   Keyboard,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -23,6 +32,30 @@ import {COUNTRY_ORIGIN_OPTIONS} from '../../constants/countryOriginOptions';
 import {NamesLoadingState} from '../../components/NamesLoadingState';
 
 const C = T.colors;
+
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const keyboardLayoutAnim = () => {
+  LayoutAnimation.configureNext({
+    duration: Platform.OS === 'ios' ? 250 : 200,
+    update: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+    },
+    create: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+    delete: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+  });
+};
 
 const GENDER_OPTIONS = [
   {label: 'All', value: 'all', color: C.text},
@@ -53,11 +86,13 @@ const FilterField = memo(function FilterField({
   placeholder,
   autoCapitalize = 'none',
   maxLength,
+  onFocusField,
 }) {
   const [focused, setFocused] = useState(false);
+  const wrapRef = useRef(null);
 
   return (
-    <View style={styles.field}>
+    <View ref={wrapRef} style={styles.field} collapsable={false}>
       <Text style={[styles.fieldLabel, focused && styles.fieldLabelActive]}>
         {label}
       </Text>
@@ -65,7 +100,10 @@ const FilterField = memo(function FilterField({
         style={[styles.input, focused && styles.inputActive]}
         value={value}
         onChangeText={onChangeText}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          setFocused(true);
+          onFocusField?.(wrapRef);
+        }}
         onBlur={() => setFocused(false)}
         placeholder={placeholder}
         placeholderTextColor={C.muted}
@@ -101,6 +139,85 @@ export default function NameFilterSearch({navigation}) {
     origins: [],
   });
   const [isApplying, setIsApplying] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const scrollRef = useRef(null);
+  const scrollOffsetRef = useRef(0);
+  const focusedFieldRef = useRef(null);
+
+  const scrollFieldIntoView = useCallback(wrapRef => {
+    const field = wrapRef?.current;
+    const scroller = scrollRef.current;
+    if (!field?.measureInWindow || !scroller?.measureInWindow) {
+      return;
+    }
+    field.measureInWindow((_fx, fy, _fw, fh) => {
+      scroller.measureInWindow((_sx, sy, _sw, sh) => {
+        const topGap = 12;
+        const bottomGap = 20;
+        const visibleTop = sy + topGap;
+        const visibleBottom = sy + sh - bottomGap;
+        let delta = 0;
+        if (fy < visibleTop) {
+          delta = fy - visibleTop;
+        } else if (fy + fh > visibleBottom) {
+          delta = fy + fh - visibleBottom;
+        }
+        if (delta !== 0) {
+          scroller.scrollTo({
+            y: Math.max(0, scrollOffsetRef.current + delta),
+            animated: true,
+          });
+        }
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      keyboardLayoutAnim();
+      setKeyboardOpen(true);
+      if (Platform.OS !== 'ios') {
+        requestAnimationFrame(() => {
+          const wrap = focusedFieldRef.current;
+          if (wrap) {
+            scrollFieldIntoView(wrap);
+          }
+        });
+      }
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardLayoutAnim();
+      setKeyboardOpen(false);
+    });
+    const didShowSub =
+      Platform.OS === 'ios'
+        ? Keyboard.addListener('keyboardDidShow', () => {
+            const wrap = focusedFieldRef.current;
+            if (wrap) {
+              requestAnimationFrame(() => scrollFieldIntoView(wrap));
+            }
+          })
+        : {remove: () => {}};
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      didShowSub.remove();
+    };
+  }, [scrollFieldIntoView]);
+
+  const onFocusField = useCallback(
+    wrapRef => {
+      focusedFieldRef.current = wrapRef;
+      requestAnimationFrame(() => scrollFieldIntoView(wrapRef));
+    },
+    [scrollFieldIntoView],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -109,6 +226,7 @@ export default function NameFilterSearch({navigation}) {
         tabBarStyle: {display: 'none', height: 0},
       });
       return () => {
+        Keyboard.dismiss();
         parent?.setOptions({
           tabBarStyle: getTabBarStyle(insets.bottom),
         });
@@ -211,6 +329,7 @@ export default function NameFilterSearch({navigation}) {
   }, [isApplying, navigation, setDiscoverFilterBusy, setSeachfilterData]);
 
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12);
+  const footerPad = keyboardOpen ? 8 : bottomPad;
   const allOriginsSelected = !(draft.origins && draft.origins.length);
 
   return (
@@ -240,28 +359,34 @@ export default function NameFilterSearch({navigation}) {
 
       <KeyboardAvoidingView
         style={styles.flex}
+        enabled={Platform.OS === 'ios'}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+        keyboardVerticalOffset={0}>
         <ScrollView
+          ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            {paddingBottom: bottomPad + 88},
-          ]}
+          contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          onScrollBeginDrag={Keyboard.dismiss}
+          onScroll={event => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
           nestedScrollEnabled
           bounces
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}>
           <Pressable onPress={Keyboard.dismiss} accessible={false}>
             <View style={styles.card}>
+              <Text style={styles.sectionLabel}>Name</Text>
               <FilterField
                 label="Starts with"
                 value={draft.firstLetter}
                 onChangeText={text => setField('firstLetter', text)}
                 placeholder="e.g. A"
                 maxLength={12}
+                onFocusField={onFocusField}
               />
               <FilterField
                 label="Ends with"
@@ -269,6 +394,7 @@ export default function NameFilterSearch({navigation}) {
                 onChangeText={text => setField('lastLetter', text)}
                 placeholder="e.g. a"
                 maxLength={12}
+                onFocusField={onFocusField}
               />
               <FilterField
                 label="Contains"
@@ -276,7 +402,11 @@ export default function NameFilterSearch({navigation}) {
                 onChangeText={text => setField('contains', text)}
                 placeholder="e.g. an"
                 maxLength={24}
+                onFocusField={onFocusField}
               />
+
+              <View style={styles.sectionRule} />
+
               <FilterField
                 label="Country or origin keyword"
                 value={draft.originQuery}
@@ -284,6 +414,7 @@ export default function NameFilterSearch({navigation}) {
                 placeholder="e.g. India or Nigeria"
                 autoCapitalize="words"
                 maxLength={32}
+                onFocusField={onFocusField}
               />
 
               <View style={styles.toggleRow}>
@@ -302,144 +433,152 @@ export default function NameFilterSearch({navigation}) {
                 />
               </View>
 
-              <Text style={styles.sectionLabel}>Gender</Text>
-              <View style={styles.genderWrap}>
-                {GENDER_OPTIONS.map(opt => {
-                  const selected = draft.gender === opt.value;
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[
-                        styles.genderChip,
-                        selected && {
-                          backgroundColor: opt.color,
-                          borderColor: opt.color,
-                        },
-                      ]}
-                      onPress={() => setField('gender', opt.value)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{selected}}>
-                      <Text
-                        style={[
-                          styles.genderChipText,
-                          selected && styles.genderChipTextOn,
-                          !selected && {color: opt.color},
-                        ]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {keyboardOpen ? null : (
+                <View style={styles.optionsBlock}>
+                  <Text style={styles.sectionLabel}>Gender</Text>
+                  <View style={styles.genderWrap}>
+                    {GENDER_OPTIONS.map(opt => {
+                      const selected = draft.gender === opt.value;
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            styles.genderChip,
+                            selected && {
+                              backgroundColor: opt.color,
+                              borderColor: opt.color,
+                            },
+                          ]}
+                          onPress={() => setField('gender', opt.value)}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}>
+                          <Text
+                            style={[
+                              styles.genderChipText,
+                              selected && styles.genderChipTextOn,
+                              !selected && {color: opt.color},
+                            ]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-              <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-                Name length
-              </Text>
-              <View style={styles.genderWrap}>
-                {NAME_LENGTH_OPTIONS.map(opt => {
-                  const selected = draft.nameLength === opt.value;
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[
-                        styles.genderChip,
-                        selected && styles.detailChipSelected,
-                      ]}
-                      onPress={() => setField('nameLength', opt.value)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{selected}}>
-                      <Text
-                        style={[
-                          styles.genderChipText,
-                          selected && styles.genderChipTextOn,
-                          !selected && {color: C.text},
-                        ]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                  <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+                    Name length
+                  </Text>
+                  <View style={styles.genderWrap}>
+                    {NAME_LENGTH_OPTIONS.map(opt => {
+                      const selected = draft.nameLength === opt.value;
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            styles.genderChip,
+                            selected && styles.detailChipSelected,
+                          ]}
+                          onPress={() => setField('nameLength', opt.value)}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}>
+                          <Text
+                            style={[
+                              styles.genderChipText,
+                              selected && styles.genderChipTextOn,
+                              !selected && {color: C.text},
+                            ]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-              <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-                Name style
-              </Text>
-              <Text style={styles.sectionHint}>
-                Uses the catalog’s verified style tags when available.
-              </Text>
-              <View style={styles.genderWrap}>
-                {NAME_STYLE_OPTIONS.map(opt => {
-                  const selected = draft.style === opt.value;
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[
-                        styles.genderChip,
-                        selected && styles.detailChipSelected,
-                      ]}
-                      onPress={() => setField('style', opt.value)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{selected}}>
-                      <Text
-                        style={[
-                          styles.genderChipText,
-                          selected && styles.genderChipTextOn,
-                          !selected && {color: C.text},
-                        ]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                  <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+                    Name style
+                  </Text>
+                  <Text style={styles.sectionHint}>
+                    Uses the catalog’s verified style tags when available.
+                  </Text>
+                  <View style={styles.genderWrap}>
+                    {NAME_STYLE_OPTIONS.map(opt => {
+                      const selected = draft.style === opt.value;
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            styles.genderChip,
+                            selected && styles.detailChipSelected,
+                          ]}
+                          onPress={() => setField('style', opt.value)}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}>
+                          <Text
+                            style={[
+                              styles.genderChipText,
+                              selected && styles.genderChipTextOn,
+                              !selected && {color: C.text},
+                            ]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-              <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-                Country / Origin
-              </Text>
-              <Text style={styles.sectionHint}>
-                Select one or more. Leave All to include every origin.
-              </Text>
-              <View style={styles.genderWrap}>
-                {COUNTRY_ORIGIN_OPTIONS.map(opt => {
-                  const selected =
-                    opt.value === 'all'
-                      ? allOriginsSelected
-                      : (draft.origins || []).includes(opt.value);
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[
-                        styles.genderChip,
-                        selected && {
-                          backgroundColor: C.primary,
-                          borderColor: C.primary,
-                        },
-                      ]}
-                      onPress={() => toggleOrigin(opt.value)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{selected}}>
-                      <Text
-                        style={[
-                          styles.genderChipText,
-                          selected
-                            ? styles.genderChipTextOn
-                            : {color: C.text},
-                        ]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                  <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+                    Country / Origin
+                  </Text>
+                  <Text style={styles.sectionHint}>
+                    Select one or more. Leave All to include every origin.
+                  </Text>
+                  <View style={styles.genderWrap}>
+                    {COUNTRY_ORIGIN_OPTIONS.map(opt => {
+                      const selected =
+                        opt.value === 'all'
+                          ? allOriginsSelected
+                          : (draft.origins || []).includes(opt.value);
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            styles.genderChip,
+                            selected && {
+                              backgroundColor: C.primary,
+                              borderColor: C.primary,
+                            },
+                          ]}
+                          onPress={() => toggleOrigin(opt.value)}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}>
+                          <Text
+                            style={[
+                              styles.genderChipText,
+                              selected
+                                ? styles.genderChipTextOn
+                                : {color: C.text},
+                            ]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
             </View>
           </Pressable>
         </ScrollView>
 
-        <View style={[styles.footer, {paddingBottom: bottomPad}]}>
+        <View
+          style={[
+            styles.footer,
+            {paddingBottom: footerPad, paddingTop: keyboardOpen ? 8 : 12},
+          ]}>
           <TouchableOpacity
             style={[styles.applyBtn, isApplying && styles.applyBtnDisabled]}
             onPress={handleApply}
@@ -487,6 +626,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     zIndex: 2,
+    backgroundColor: C.bg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
   },
   backBtn: {
     width: 40,
@@ -516,18 +658,23 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 12,
+    paddingBottom: 20,
+    flexGrow: 1,
   },
   card: {
     backgroundColor: C.surface,
     borderRadius: 24,
     paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
+    paddingTop: 16,
+    paddingBottom: 18,
     ...softShadow,
   },
+  optionsBlock: {
+    overflow: 'hidden',
+  },
   field: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   fieldLabel: {
     fontFamily: Fonts.medium,
@@ -589,9 +736,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.muted,
     marginBottom: 12,
+    letterSpacing: 0.2,
   },
   sectionLabelSpaced: {
-    marginTop: 6,
+    marginTop: 8,
     marginBottom: 4,
   },
   sectionHint: {
@@ -599,6 +747,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: C.muted,
     marginBottom: 12,
+    lineHeight: 15,
+  },
+  sectionRule: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: C.border,
+    marginBottom: 16,
+    marginTop: 2,
   },
   genderWrap: {
     flexDirection: 'row',
@@ -628,10 +783,19 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 12,
     backgroundColor: C.bg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#2D3436',
+        shadowOffset: {width: 0, height: -4},
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {elevation: 8},
+    }),
   },
   applyBtn: {
     height: 48,
