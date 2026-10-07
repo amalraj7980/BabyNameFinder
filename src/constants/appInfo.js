@@ -1,9 +1,9 @@
 /** App metadata — keep APP_NATIVE_VERSION in sync with android versionName / iOS MARKETING_VERSION. */
 export const APP_DISPLAY_NAME = 'Baby Names Together';
 export const APP_SHORT_NAME = 'Baby Names';
-export const APP_VERSION = '2.1.0';
+export const APP_VERSION = '2.1.1';
 /** Fallback when DeviceInfo is unavailable (before native rebuild). */
-export const APP_NATIVE_VERSION = '2.1';
+export const APP_NATIVE_VERSION = '2.1.1';
 export const IOS_APP_STORE_ID = '';
 
 export const PRIVACY_POLICY_URL =

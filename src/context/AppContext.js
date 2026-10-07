@@ -16,7 +16,6 @@ import {
 import {
   initConnection,
   getProducts,
-  getPurchaseHistory,
   getSubscriptions,
   purchaseErrorListener,
   purchaseUpdatedListener,

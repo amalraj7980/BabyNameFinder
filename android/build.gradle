@@ -6,9 +6,9 @@ buildscript {
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.1.20"
-        // Play Billing for react-native-iap (play flavor)
-        googlePlayBillingVersion = "7.1.1"
-        playBillingSdkVersion = "7.1.1"
+        // Play Billing for react-native-iap (play flavor). Google Play requires 8.0.0+.
+        googlePlayBillingVersion = "8.3.0"
+        playBillingSdkVersion = "8.3.0"
         playServicesVersion = "18.10.1"
     }
     repositories {
